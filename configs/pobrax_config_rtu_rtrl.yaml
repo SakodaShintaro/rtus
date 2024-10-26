@@ -1,0 +1,55 @@
+
+tag: 
+wandb_project_name: rtu_rtrl 
+exp_seed: 0
+
+#### Env related
+env_config: 
+  domain: pobrax_p  # gymnax, brax,pobrax_p or pobrax_v, popjax
+  env_name: ant_p   # cheetah_p, hopper_p, walker_p,ant_v, cheetah_v, hopper_v, walker_v
+  ## for env with continuous action space
+  continous_a: True
+  clip_action: True
+  ## wrappers
+  normalize_obs: True
+  normalize_reward: True
+  ## for creating partial obs in gymnax env
+  masked_obs: True
+  add_noise: false
+  add_reward_prev_action: False # currently works with discrete action space
+
+
+#### ppo related
+ppo_config:
+  gamma: 0.99
+  gae_lambda: 0.95
+
+  total_steps: 5000000
+  rollout_steps: 2048
+
+  epochs: 4
+  num_mini_batch: 32
+  seq_len_in_minibatch: 1 # 1 for no rnn or rtrl
+
+  clip_eps: 0.2
+  vf_coef: 0.5
+  gradient_clipping: True
+  max_grad_norm: 0.5
+  entropy_coef: 0.0
+
+  ## network related
+  lr: 0.0001
+  rec_fn: linear_rtu 
+  d_rec: 192
+  activation: tanh
+  d_shared_repr: [64]
+  d_actor_head: 64
+  d_critic_head: 64
+
+  # ablation specific
+  stale_target:  true
+  stale_gradient: true
+  grad_estimator: rtrl    # bp with mlps. with rnns use bptt, rtrl or rtrl_bptt
+
+
+
