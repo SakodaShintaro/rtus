@@ -4,7 +4,7 @@
 
 ***(Published in Advances in Neural Information Processing Systems (NeurIPS 2024))***
 
-Note: This repo is still under construction, it currently contains the code to reproduce LRUs and RTUs experiments. Other baselines used in the paper will be added soon.
+
 ## Contents
 
 - [Overview](#overview)
