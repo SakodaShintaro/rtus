@@ -54,7 +54,10 @@ def rtrl_grads(state, batch_x, batch_y):
     hidden_size = params["params"]["SimpleCell_0"]["h"]["kernel"].shape[0]
 
     # 最初のキャリー状態を初期化
-    c = jnp.zeros((batch_size, hidden_size))
+    h = jnp.zeros((batch_size, hidden_size))
+
+    # RNNの更新式は
+    # h(t+1) = \tanh(Wi x + bi + Wh h(t))
 
     # 感度行列 : 隠れ状態に対するパラメータの偏微分を保持 (batch, hidden_size, n_params)
     S = jnp.zeros((batch_size, hidden_size, n_params))
@@ -64,8 +67,32 @@ def rtrl_grads(state, batch_x, batch_y):
 
     loss = 0.0
 
+    # 各ステップの勾配和
+    # dL_{total}(1,T)/dW = \sum _ {t=1} ^ {T} dL_{t}/dW
+    # dL_{t}/dW = \sum _ {k=1} ^{N} (dL_{t}/dh_{t} * dh_{t}/dW)
+    # つまり以下の2つで勾配が計算できる
+    # (a) dL_{t}/dh_{t} : このステップでの損失に対する隠れ状態の勾配
+    #     これは普通に計算できる
+    # (b) dh_{t}/dW : 感度行列(S(t))
+    #     これは各ステップで再帰的に計算できる
+    #     要するにh(t-1)を定数だと思って、かつS(t)をかけたものの勾配を求める
+
     for t in range(seq_len):
         xt = batch_x[t]
+        yt = batch_y[t]
+
+        # (a) dL_{t}/dh_{t} : このステップでの損失に対する隠れ状態の勾配
+        def step_loss_fn(h):
+            _, y_pred = model(params, h, xt)
+            return jnp.mean((y_pred - yt) ** 2)
+        loss, grads_dL_dh = jax.value_and_grad(step_loss_fn)(h)
+        # print(grads_dL_dh.shape)  (1, 20)
+
+        # (b) dh_{t}/dW : 感度行列(S(t))
+        # これのためにはWiに対する勾配とh(t-1)に対する黄梅を求めてSと組み合わせてどうにかするとできそう
+
+    # 平均損失を返す
+    loss = loss / seq_len
 
     return loss, unravel_fn(grad_flat)
 
