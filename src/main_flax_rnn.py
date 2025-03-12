@@ -4,6 +4,7 @@ import optax
 import flax.linen as nn
 from flax.training import train_state
 import numpy as np
+from functools import partial
 
 
 # RNN Model Definition
@@ -12,11 +13,11 @@ class RNNModel(nn.Module):
     output_dim: int
 
     @nn.compact
-    def __call__(self, x, carry):
+    def __call__(self, carry, x):
         rnn = nn.SimpleCell(features=self.hidden_size)
         carry, hidden = rnn(carry, x)
         y = nn.Dense(features=self.output_dim)(hidden)
-        return y, carry
+        return carry, y
 
 
 def loss_fn(params, model, x, y):
@@ -29,14 +30,9 @@ def loss_fn(params, model, x, y):
     hidden_size = params["params"]["SimpleCell_0"]["h"]["kernel"].shape[0]
     initial_carry = jnp.zeros((batch_size, hidden_size))
 
-    def step_fn(carry, x_t):
-        # x_t shape: [batch_size, input_dim]
-        y_pred, new_carry = model(params, x_t, carry)
-        return new_carry, y_pred
-
     # scanでシーケンス全体に対して処理を適用
+    step_fn = partial(model, params)
     _, y_pred = jax.lax.scan(step_fn, initial_carry, x)
-    # y_pred shape: [seq_len, batch_size, hidden_size]
 
     # MSE損失を計算
     loss = jnp.mean((y_pred - y) ** 2)
@@ -69,8 +65,8 @@ if __name__ == "__main__":
     # 単一時点のバッチデータでモデルを初期化
     params = model.init(
         jax.random.PRNGKey(0),
-        jnp.ones((batch_size, input_dim)),
         jnp.ones((batch_size, hidden_size)),
+        jnp.ones((batch_size, input_dim)),
     )
 
     # 訓練状態の作成
