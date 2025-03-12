@@ -48,7 +48,7 @@ if __name__ == "__main__":
     num_steps = 100
 
     data_x = np.random.randn(batch_size, seq_len, input_dim).astype(np.float32)
-    data_y = np.sum(data_x, axis=2)  # Simple sum as target
+    data_y = np.random.randn(batch_size, seq_len, input_dim).astype(np.float32)
 
     model = RNNModel(hidden_size=hidden_size)
     params = model.init(jax.random.PRNGKey(0), jnp.ones((seq_len, input_dim)))
