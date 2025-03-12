@@ -7,7 +7,6 @@ import numpy as np
 from functools import partial
 
 
-# RNN Model Definition
 class RNNModel(nn.Module):
     hidden_size: int
     output_dim: int
@@ -25,8 +24,8 @@ def loss_fn(params, model, x, y):
     batch_size = x.shape[1]
 
     # 最初のキャリー状態を初期化
-    # SimpleCell用の初期状態を作成（0で初期化されたベクトル）
-    # モデルのパラメータから隠れ層のサイズを取得
+    # あまり良くないがモデルのパラメータから隠れ層のサイズを取得している
+    # おそらく状態もloss_fnの引数として与えてしまうのが良いと思う
     hidden_size = params["params"]["SimpleCell_0"]["h"]["kernel"].shape[0]
     initial_carry = jnp.zeros((batch_size, hidden_size))
 
@@ -39,7 +38,6 @@ def loss_fn(params, model, x, y):
     return loss
 
 
-# Training Setup
 @jax.jit
 def train_step(state, batch_x, batch_y):
     loss, grads = jax.value_and_grad(loss_fn)(
@@ -56,13 +54,12 @@ if __name__ == "__main__":
     hidden_size = 20
     num_steps = 100
 
-    # 入力データとターゲットデータの作成
+    # ダミーなランダムデータとして入力データとターゲットデータを作成
     data_x = np.random.randn(seq_len, batch_size, input_dim).astype(np.float32)
     data_y = np.random.randn(seq_len, batch_size, input_dim).astype(np.float32)
 
     # モデルの初期化
     model = RNNModel(hidden_size=hidden_size, output_dim=input_dim)
-    # 単一時点のバッチデータでモデルを初期化
     params = model.init(
         jax.random.PRNGKey(0),
         jnp.ones((batch_size, hidden_size)),
