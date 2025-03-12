@@ -5,9 +5,9 @@ sys.path.append("../")
 from flax import linen as nn
 import jax.numpy as jnp
 from typing import Any, Tuple
-from src.nets.rtus.rtus_utils import *
-from src.nets.rtus.linear_rtus import *
-from src.nets.rtus.non_linear_rtus import *
+from src.nets.rtus.rtus_utils import act_options
+from src.nets.rtus.linear_rtus import RealTimeLinearRTUs
+from src.nets.rtus.non_linear_rtus import RealTimeNonLinearRTUs
 
 
 PRNGKey = Any
@@ -51,7 +51,7 @@ class RealTimeNonLinearRTUsLayer(nn.Module):
 
 """
 A Consice interface to Real-Time Linear RTUs
-Linear recurrence + non-linear output 
+Linear recurrence + non-linear output
 """
 
 

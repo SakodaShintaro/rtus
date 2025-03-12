@@ -16,7 +16,12 @@ import jax
 import jax.numpy as jnp
 import flax
 from typing import Any, Tuple
-from src.nets.rtus.rtus_utils import *
+from src.nets.rtus.rtus_utils import (
+    initialize_exp_exp_r,
+    initialize_theta_log,
+    g_phi_params,
+    d_g_phi_exp_exp_nu_params,
+)
 
 PRNGKey = Any
 Shape = Tuple[int, ...]
@@ -26,10 +31,10 @@ Array = Any
 
 """
 # Linear RTUs with gradient corrections in forward pass
-grad memory: dh_c1_{t-1}/d w_r #0, dh_c2_{t-1}/d w_r #1,  
+grad memory: dh_c1_{t-1}/d w_r #0, dh_c2_{t-1}/d w_r #1,
              dh_c1_{t-1}/d w_theta #2, dh_c2_{t-1}/d w_theta #3,
-             dh_c1_{t-1}/d w_c1_x #4, dh_c2_{t-1}/d w_c1_x #5,  
-             dh_c1_{t-1}/d w_c2_x #6, dh_c2_{t-1}/d w_c2_x #7, 
+             dh_c1_{t-1}/d w_c1_x #4, dh_c2_{t-1}/d w_c1_x #5,
+             dh_c1_{t-1}/d w_c2_x #6, dh_c2_{t-1}/d w_c2_x #7,
 
 dh_c*/d w_r.shape = (batch_size, n_hidden)
 dh_c*/d w_theta.shape = (batch_size, n_hidden)
