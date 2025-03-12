@@ -69,6 +69,7 @@ def rtrl_grads(state, batch_x, batch_y):
 
     return loss, unravel_fn(grad_flat)
 
+
 if __name__ == "__main__":
     # グローバルなシードを設定
     SEED = 0
