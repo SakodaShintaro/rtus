@@ -1,15 +1,15 @@
-import typing as t
-from typing import Callable, Optional, Dict, Any
+from typing import Dict, Any
 from flax import struct
+
 
 def flax_struct_to_dict(target):
     target_dict = {}
     for field_info in struct.dataclasses.fields(target):
         target_dict[field_info.name] = getattr(target, field_info.name)
     return target_dict
-    
 
-#this function is copied from https://gist.github.com/Microsheep/11edda9dee7c1ba0c099709eb7f8bea7
+
+# this function is copied from https://gist.github.com/Microsheep/11edda9dee7c1ba0c099709eb7f8bea7
 def transform_dict(config_dict: Dict, expand: bool = True):
     """
     General function to transform any dictionary into wandb config acceptable format
@@ -31,6 +31,6 @@ def transform_dict(config_dict: Dict, expand: bool = True):
             # Transform to YAML-friendly (str) format
             # Need to handle both Classes, Callables, Object Instances
             # Custom Classes might not have great __repr__ so __name__ might be better in these cases
-            vname = v.__name__ if hasattr(v, '__name__') else v.__class__.__name__
+            vname = v.__name__ if hasattr(v, "__name__") else v.__class__.__name__
             ret[k] = f"{v.__module__}:{vname}"
     return ret
