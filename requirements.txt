@@ -1,5 +1,6 @@
-numpy==1.23
-jax[cuda12]
+numpy==1.25
+jax[cuda12]==0.5.2
 flax
 distrax
 wandb
+optax==0.2.4
