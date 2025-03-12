@@ -1,0 +1,5 @@
+numpy==1.23
+jax[cuda12]
+flax
+distrax
+wandb
