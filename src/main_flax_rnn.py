@@ -41,27 +41,22 @@ def train_step(state, batch_x, batch_y):
 
 
 if __name__ == "__main__":
-    # Data Generation
-    seq_length = 10
-    num_samples = 1000
+    seq_len = 10
+    batch_size = 64
     input_dim = 5
     hidden_size = 20
+    num_steps = 100
 
-    data_x = np.random.randn(num_samples, seq_length, input_dim).astype(np.float32)
+    data_x = np.random.randn(batch_size, seq_len, input_dim).astype(np.float32)
     data_y = np.sum(data_x, axis=2)  # Simple sum as target
 
     model = RNNModel(hidden_size=hidden_size)
-    params = model.init(jax.random.PRNGKey(0), jnp.ones((seq_length, input_dim)))
+    params = model.init(jax.random.PRNGKey(0), jnp.ones((seq_len, input_dim)))
     state = train_state.TrainState.create(
         apply_fn=model.apply, params=params, tx=optax.adam(1e-3)
     )
 
-    # Training Loop
-    num_epochs = 10
-    batch_size = 32
-    for epoch in range(num_epochs):
-        for i in range(0, num_samples, batch_size):
-            batch_x = data_x[i : i + batch_size]
-            batch_y = data_y[i : i + batch_size]
-            state, loss = train_step(state, batch_x, batch_y)
-        print(f"Epoch {epoch + 1}, Loss: {loss:.4f}")
+    for step in range(num_steps):
+        state, loss = train_step(state, data_x, data_y)
+        if (step + 1) % 10 == 0:
+            print(f"Step {step + 1:03d}/{num_steps}, Loss: {loss:.6f}")
