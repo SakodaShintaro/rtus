@@ -24,8 +24,6 @@ def loss_fn(params, model, x, y):
     batch_size = x.shape[1]
 
     # 最初のキャリー状態を初期化
-    # あまり良くないがモデルのパラメータから隠れ層のサイズを取得している
-    # おそらく状態もloss_fnの引数として与えてしまうのが良いと思う
     hidden_size = params["params"]["SimpleCell_0"]["h"]["kernel"].shape[0]
     initial_carry = jnp.zeros((batch_size, hidden_size))
 
@@ -48,6 +46,11 @@ def train_step(state, batch_x, batch_y):
 
 
 if __name__ == "__main__":
+    # グローバルなシードを設定
+    SEED = 0
+    np.random.seed(SEED)
+    rng_key = jax.random.PRNGKey(SEED)
+
     seq_len = 10
     batch_size = 64
     input_dim = 5
@@ -58,10 +61,13 @@ if __name__ == "__main__":
     data_x = np.random.randn(seq_len, batch_size, input_dim).astype(np.float32)
     data_y = np.random.randn(seq_len, batch_size, input_dim).astype(np.float32)
 
+    # JAXのPRNGキーを分割して使用
+    rng_key, init_key = jax.random.split(rng_key)
+
     # モデルの初期化
     model = RNNModel(hidden_size=hidden_size, output_dim=input_dim)
     params = model.init(
-        jax.random.PRNGKey(0),
+        init_key,
         jnp.ones((batch_size, hidden_size)),
         jnp.ones((batch_size, input_dim)),
     )
