@@ -1,8 +1,7 @@
 from flax import linen as nn
 import jax
 import jax.numpy as jnp
-import flax
-from typing import Callable, Any, Tuple, Iterable, Optional
+from typing import Any, Tuple
 from params_init import *
 from functools import partial
 
@@ -34,8 +33,12 @@ class LRU(nn.Module):
         input_dim = inputs.shape[-1]
         hidden_dim = h_tminus1.shape[-1]
 
-        nu_log = self.param("nu_log", nu_log_init, (1,hidden_dim), self.r_max, self.r_min)
-        theta_log = self.param("theta_log", theta_log_init, (1,hidden_dim), self.max_phase)
+        nu_log = self.param(
+            "nu_log", nu_log_init, (1, hidden_dim), self.r_max, self.r_min
+        )
+        theta_log = self.param(
+            "theta_log", theta_log_init, (1, hidden_dim), self.max_phase
+        )
 
         B_real = self.param(
             "B_real",
@@ -49,7 +52,9 @@ class LRU(nn.Module):
             (hidden_dim, input_dim),
         )
 
-        gamma_log = self.param("gamma_log", gamma_log_init, (1,hidden_dim), nu_log, theta_log)
+        gamma_log = self.param(
+            "gamma_log", gamma_log_init, (1, hidden_dim), nu_log, theta_log
+        )
 
         Lambda = get_lambda(nu_log, theta_log)
         B = B_real + 1j * B_img
@@ -92,6 +97,7 @@ class LRULayer(nn.Module):
 class BPTTLRUs(nn.Module):
     d_output: int
     d_hidden: int
+
     @nn.compact
     def __call__(self, c, xs):
         model = nn.scan(
@@ -103,21 +109,21 @@ class BPTTLRUs(nn.Module):
         )
         return model(d_output=self.d_output)(c, xs)
 
-    def initialize_state(self,batch_size):
-        hidden_init = jnp.zeros((batch_size,self.d_hidden), dtype=jnp.complex64)
+    def initialize_state(self, batch_size):
+        hidden_init = jnp.zeros((batch_size, self.d_hidden), dtype=jnp.complex64)
         return hidden_init
 
 
-if __name__=="__main__":
+if __name__ == "__main__":
     d_input = 3
     d_hidden = 2
     seq_len = 20
     batch_size = 10
     key = jax.random.PRNGKey(42)
 
-    init_x = jnp.zeros((seq_len,batch_size,d_input)) #batch_size,seq_len,d_input
-    
-    ## BPTT Linear RTUs    
-    bptt_lrtu = BPTTLRUs(d_hidden=d_hidden,d_output=1)
+    init_x = jnp.zeros((seq_len, batch_size, d_input))  # batch_size,seq_len,d_input
+
+    ## BPTT Linear RTUs
+    bptt_lrtu = BPTTLRUs(d_hidden=d_hidden, d_output=1)
     hidden_init = bptt_lrtu.initialize_state(batch_size)
     bptt_lrtu_params = bptt_lrtu.init(key, hidden_init, init_x)
