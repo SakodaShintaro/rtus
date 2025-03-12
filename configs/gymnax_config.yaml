@@ -1,10 +1,9 @@
-
 tag: rtu_rtrl
-wandb_project_name: debugging 
+wandb_project_name: debugging
 exp_seed: 0
 
 #### Env related
-env_config: 
+env_config:
   domain: brax  # gymnax, brax,pobrax_p or pobrax_v, popjax
   env_name: ant
   ## for env with continuous action space
@@ -39,7 +38,7 @@ ppo_config:
 
   ## network related
   lr: 0.0001
-  rec_fn: mlp 
+  rec_fn: mlp
   d_rec: None
   activation: tanh
   d_shared_repr: [64]
@@ -50,6 +49,3 @@ ppo_config:
   stale_target:  true
   stale_gradient: true
   grad_estimator: bp    # bp with mlps. with rnns use bptt, rtrl or rtrl_bptt
-
-
-
