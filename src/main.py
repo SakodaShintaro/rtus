@@ -76,6 +76,9 @@ def rtrl_grads(state, batch_x, batch_y):
     S_R = jnp.zeros((batch_size, hidden_size, *R.shape))
     S_W = jnp.zeros((batch_size, hidden_size, *W.shape))
     S_B = jnp.zeros((batch_size, hidden_size, *B.shape))
+    print(f"{S_R.shape=}")
+    print(f"{S_W.shape=}")
+    print(f"{S_B.shape=}")
 
     grad_structured = unravel_fn(jnp.zeros(n_params))
     seq_len = batch_x.shape[0]
@@ -121,11 +124,9 @@ def rtrl_grads(state, batch_x, batch_y):
         new_S_W = np.zeros_like(S_W)
         for k in range(hidden_size):
             for i in range(S_W.shape[-2]):
-                for j in range(S_W.shape[-1]):
-                    new_S_W[:, k, i, j] = x_t[:, i] * (k == j)
-                    new_S_W[:, k, i, j] += np.einsum(
-                        "n,bn,bn->b", R[k], dtanh(s_t_minus_1), S_W[:, :, i, j]
-                    )
+                new_S_W[:, k, i] = np.einsum(
+                    "b,h->bh", x_t[:, i], np.eye(hidden_size)[k]
+                ) + np.einsum("n,bn,bnh->bh", R[k], dtanh(s_t_minus_1), S_W[:, :, i])
         print("S_B")
         new_S_B = np.eye(hidden_size)[None, :, :] + np.einsum(
             "nk,bn,bnj->bkj", R, dtanh(s_t_minus_1), S_B
