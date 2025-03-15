@@ -72,8 +72,9 @@ def rtrl_grads(state, batch_x, batch_y):
     #   h(t+1) = \tanh(W x + B + R h(t))
 
     # 感度行列 : 隠れ状態に対するパラメータの偏微分を保持 (batch, hidden_size, n_params)
-    S_W = jnp.zeros((batch_size, hidden_size, *W.shape))
     S_R = jnp.zeros((batch_size, hidden_size, *R.shape))
+    S_W = jnp.zeros((batch_size, hidden_size, *W.shape))
+    S_B = jnp.zeros((batch_size, hidden_size, *B.shape))
 
     grad_structured = unravel_fn(jnp.zeros(n_params))
     seq_len = batch_x.shape[0]
@@ -117,6 +118,7 @@ def rtrl_grads(state, batch_x, batch_y):
 
         # 感度行列の更新
         S_W = np.array(S_W)
+        S_B = np.array(S_B)
         S_R = np.array(S_R)
 
         print("S_W")
@@ -132,6 +134,14 @@ def rtrl_grads(state, batch_x, batch_y):
                     #     new_S_W[:, k, i, j] += (
                     #         R[k, n] * dtanh(s_t[:, n]) * S_W[:, n, i, j]
                     #     )
+        print("S_B")
+        new_S_B = np.zeros_like(S_B)
+        for k in range(hidden_size):
+            for j in range(S_B.shape[-1]):
+                new_S_B[:, k, j] = (j == k)
+                new_S_B[:, k, j] += np.einsum(
+                    "n,bn,bn->b", R[k], dtanh(s_t), S_B[:, :, j]
+                )
         print("S_R")
         new_S_R = np.zeros_like(S_R)
         for k in range(hidden_size):
@@ -159,15 +169,19 @@ def rtrl_grads(state, batch_x, batch_y):
         # ] + jnp.einsum("kn,bn,nbij->bkij", R, dtanh(s_t), S_R)
 
         S_W = jnp.array(new_S_W)
+        S_B = jnp.array(new_S_B)
         S_R = jnp.array(new_S_R)
 
         print(f"{S_W.shape=}")
+        print(f"{S_B.shape=}")
         print(f"{S_R.shape=}")
 
         curr_grad_W = jnp.einsum("bh,bhij->bij", dl_ds, S_W)
+        curr_grad_B = jnp.einsum("bh,bhj->bj", dl_ds, S_B)
         curr_grad_R = jnp.einsum("bh,bhij->bij", dl_ds, S_R)
 
         grad_structured["params"]["SimpleCell_0"]["i"]["kernel"] += curr_grad_W
+        grad_structured["params"]["SimpleCell_0"]["i"]["bias"] += curr_grad_B
         grad_structured["params"]["SimpleCell_0"]["h"]["kernel"] += curr_grad_R
 
     # 平均損失を返す
@@ -228,6 +242,12 @@ if __name__ == "__main__":
     grads_diff_W = jnp.abs(grads_bptt_W - grads_rtrl_W)
     grads_diff_W = jnp.mean(grads_diff_W)
     print(f"{grads_diff_W=}")
+
+    grads_bptt_B = grads_bptt["params"]["SimpleCell_0"]["i"]["bias"]
+    grads_rtrl_B = grads_rtrl["params"]["SimpleCell_0"]["i"]["bias"]
+    grads_diff_B = jnp.abs(grads_bptt_B - grads_rtrl_B)
+    grads_diff_B = jnp.mean(grads_diff_B)
+    print(f"{grads_diff_B=}")
 
     grads_bptt_R = grads_bptt["params"]["SimpleCell_0"]["h"]["kernel"]
     grads_rtrl_R = grads_rtrl["params"]["SimpleCell_0"]["h"]["kernel"]
