@@ -116,14 +116,15 @@ def rtrl_grads(state, batch_x, batch_y):
         print(f"{dl_ds.shape=}")
 
         # 感度行列の更新
+        d_s = dtanh(s_t_minus_1)
         print("S_W")
         S_W = jnp.einsum("bd,hk->bkdh", x_t, jnp.eye(hidden_size)) + jnp.einsum(
-            "nk,bn,bndh->bkdh", R, dtanh(s_t_minus_1), S_W
+            "nk,bn,bndh->bkdh", R, d_s, S_W
         )
 
         print("S_B")
         S_B = jnp.eye(hidden_size)[None, :, :] + jnp.einsum(
-            "nk,bn,bnj->bkj", R, dtanh(s_t_minus_1), S_B
+            "nk,bn,bnj->bkj", R, d_s, S_B
         )
 
         print("S_R")
@@ -132,7 +133,7 @@ def rtrl_grads(state, batch_x, batch_y):
             jnp.sum(h_t, axis=1),
             jnp.eye(hidden_size),
             jnp.ones(hidden_size),
-        ) + jnp.einsum("kn,bn,bnih->bkih", R, dtanh(s_t_minus_1), S_R)
+        ) + jnp.einsum("kn,bn,bnih->bkih", R, d_s, S_R)
 
         curr_grad_W = jnp.einsum("bh,bhij->bij", dl_ds, S_W)
         curr_grad_B = jnp.einsum("bh,bhj->bj", dl_ds, S_B)
