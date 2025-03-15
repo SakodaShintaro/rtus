@@ -42,7 +42,7 @@ $$
 \end{align}
 $$
 
-となります。 $\frac{\partial \mathcal{L}(t)}{\partial \bs{s} _ k(t)}$ は逆伝播をすれば求まるので、 $\frac{\partial \bs{s} _ k(t)}{\partial \bs{W} _ {i, j}}$ を保持しながら更新していけば良いというのがRTRLの考え方になります。
+となります。 $\frac{\partial \mathcal{L}(t)}{\partial \bs{s} _ k(t)}$ は逆伝播をすれば求まるので、 $\frac{\partial \bs{s} _ k(t)}{\partial \bs{W} _ {i, j}}$ を保持しながら更新していけば良いというのがRTRLの考え方になります（これを感度行列と呼びます）。
 
 これはRNNの式から
 
@@ -53,13 +53,17 @@ $$
 \end{align}
 $$
 
-と再帰的に求まります。 $\bs{B}, \bs{R}$ についても同様に考えると
+と再帰的に求まります。 $\bs{B}, \bs{R}$ についても同様に考えると、
+
+$\bs{B}$ について
 
 $$
 \begin{align}
 \frac{\partial \bs{s} _ k(t)}{\partial \bs{B} _ {j}} = \mathbb{1} _ {j=k} + \sum _ {n = 1} ^ N \bs{R} _ {n, k} \sigma'(\bs{s} _ n (t - 1)) \frac{\partial \bs{s} _ n(t - 1)}{\partial \bs{B} _ {j}}
 \end{align}
 $$
+
+$\bs{R}$ について
 
 $$
 \begin{align}
@@ -69,8 +73,8 @@ $$
   +
   \left(\bs{R} _ {n, k} \sigma'(\bs{s} _ n (t - 1)) \frac{\partial \bs{s} _ n(t - 1)}{\partial \bs{R} _ {i, j}}\right)
 \right\rbrack \\
-&= \left(\sigma(\bs{s} _ j (t - 1))\right) \mathbb{1} _ {j=k} + \sum _ {n = 1} ^ N
-  \left(\bs{R} _ {k, n} \sigma'(\bs{s} _ n (t - 1)) \frac{\partial \bs{s} _ n(t - 1)}{\partial \bs{R} _ {i, j}}\right) \\
+&= \left(\sigma(\bs{s} _ i (t - 1))\right) \mathbb{1} _ {j=k} + \sum _ {n = 1} ^ N
+  \left(\bs{R} _ {n, k} \sigma'(\bs{s} _ n (t - 1)) \frac{\partial \bs{s} _ n(t - 1)}{\partial \bs{R} _ {i, j}}\right) \\
 \end{align}
 $$
 
@@ -78,10 +82,46 @@ $$
 
 ## 実装
 
-これらの式において $\mathbb{1} _ {j = k}$ は $j=k$ のときだけ $1$ 、それ以外の場合は $0$ となるものなので、単位行列との演算と考えます。 $\bs{I} _ n \in \mathbb{R} ^ {N \times N}$ の単位行列を考えるとして
+これらの式において $\mathbb{1} _ {j = k}$ は $j=k$ のときだけ $1$ 、それ以外の場合は $0$ となるものなので、単位行列との演算と考えます。各式の添字を素直に `jnp.einsum` に書き換えていきます。感度行列なので変数名は `S` として
+
+(1) $\bs{W}$ について
 
 $$
 \begin{align}
 \frac{\partial \bs{s} _ k(t)}{\partial \bs{W} _ {i, j}} &= \bs{x} _ i (t) \mathbb{1} _ {j=k} + \sum _ {n = 1} ^ N \bs{R} _ {n, k} \sigma'(\bs{s} _ n (t - 1)) \frac{\partial \bs{s} _ n(t - 1)}{\partial \bs{W} _ {i, j}}\\
 \end{align}
 $$
+
+```python
+S_W = jnp.einsum("bi,jk->bkij", x_t, eye) \
+    + jnp.einsum("nk,bn,bnij->bkij", R, d_s, S_W)
+```
+
+(2) $\bs{B}$ について
+
+$$
+\begin{align}
+\frac{\partial \bs{s} _ k(t)}{\partial \bs{B} _ {j}} = \mathbb{1} _ {j=k} + \sum _ {n = 1} ^ N \bs{R} _ {n, k} \sigma'(\bs{s} _ n (t - 1)) \frac{\partial \bs{s} _ n(t - 1)}{\partial \bs{B} _ {j}}
+\end{align}
+$$
+
+```python
+S_B = eye[None, :, :] + jnp.einsum("nk,bn,bnj->bkj", R, d_s, S_B)
+```
+
+(3) $\bs{R}$ について
+
+$$
+\begin{align}
+\frac{\partial \bs{s} _ k(t)}{\partial \bs{R} _ {i, j}} = \left(\sigma(\bs{s} _ i (t - 1))\right) \mathbb{1} _ {j=k} + \sum _ {n = 1} ^ N
+  \left(\bs{R} _ {n, k} \sigma'(\bs{s} _ n (t - 1)) \frac{\partial \bs{s} _ n(t - 1)}{\partial \bs{R} _ {i, j}}\right)
+\end{align}
+$$
+
+```python
+h_t_minus_1 = jnp.tanh(s_t_minus_1)
+S_R = jnp.einsum("bi,jk->bkij", h_t_minus_1, eye) \
+    + jnp.einsum("nk,bn,bnij->bkij", R, d_s, S_R)
+```
+
+というわけで、要素ごとの計算で書くと `einsum` での実装がそのまま書き写すだけになるため非常に便利でした。
