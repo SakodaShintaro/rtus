@@ -63,6 +63,8 @@ def rtrl_grads(state, batch_x, batch_y):
     Wy = params["params"]["Dense_0"]["kernel"]
     Wy_b = params["params"]["Dense_0"]["bias"]
 
+    input_size = W.shape[0]
+
     # 最初のキャリー状態を初期化
     h_t = jnp.zeros((batch_size, hidden_size))
 
@@ -107,7 +109,8 @@ def rtrl_grads(state, batch_x, batch_y):
         loss_t = jnp.mean((y_t_sub - y_t_ref) ** 2)
         loss += loss_t
 
-        dl_dyt = 2 * (y_t_sub - y_t_ref)
+        dl_dyt = 2 * (y_t_sub - y_t_ref) / (batch_size * seq_len * input_size)
+        grad_structured["params"]["Dense_0"]["kernel"] += jnp.einsum("bd,bh->hd", dl_dyt, h_t)
         dl_dh = jnp.dot(dl_dyt, Wy.T)
         dl_ds = dl_dh * (1 - h_t**2)
         print(f"{dl_ds.shape=}")
@@ -213,6 +216,12 @@ if __name__ == "__main__":
 
     loss_diff = jnp.abs(loss_bptt - loss_rtrl)
     print(f"{loss_diff=}")
+
+    grads_bptt_Wy = grads_bptt["params"]["Dense_0"]["kernel"]
+    grads_rtrl_Wy = grads_rtrl["params"]["Dense_0"]["kernel"]
+    grads_diff_Wy = jnp.abs(grads_bptt_Wy - grads_rtrl_Wy)
+    grads_diff_Wy = jnp.mean(grads_diff_Wy)
+    print(f"{grads_diff_Wy=}")
 
     grads_bptt_W = grads_bptt["params"]["SimpleCell_0"]["i"]["kernel"]
     grads_rtrl_W = grads_rtrl["params"]["SimpleCell_0"]["i"]["kernel"]
