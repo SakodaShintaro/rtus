@@ -66,7 +66,8 @@ def rtrl_grads(state, batch_x, batch_y):
     input_size = W.shape[0]
 
     # 最初のキャリー状態を初期化
-    h_t = jnp.zeros((batch_size, hidden_size))
+    s_t = jnp.zeros((batch_size, hidden_size))
+    h_t = jnp.tanh(s_t)
 
     # RNNの更新式は
     #   h(t+1) = \tanh(W x + B + R h(t))
@@ -104,6 +105,8 @@ def rtrl_grads(state, batch_x, batch_y):
         # print(f"{Wy_b.shape=}")  # (5,)
         # print(f"{y_t_ref.shape=}")  # (1, 5)
 
+        s_t_minus_1 = s_t
+
         s_t = jnp.dot(x_t, W) + B + jnp.dot(h_t, R)
         h_t = jnp.tanh(s_t)
         y_t_sub = jnp.dot(h_t, Wy) + Wy_b
@@ -111,7 +114,9 @@ def rtrl_grads(state, batch_x, batch_y):
         loss += loss_t
 
         dl_dyt = 2 * (y_t_sub - y_t_ref) / (batch_size * seq_len * input_size)
-        grad_structured["params"]["Dense_0"]["kernel"] += jnp.einsum("bd,bh->hd", dl_dyt, h_t)
+        grad_structured["params"]["Dense_0"]["kernel"] += jnp.einsum(
+            "bd,bh->hd", dl_dyt, h_t
+        )
         dl_dh = jnp.dot(dl_dyt, Wy.T)
         dl_ds = dl_dh * (1 - h_t**2)
         print(f"{dl_ds.shape=}")
@@ -128,19 +133,15 @@ def rtrl_grads(state, batch_x, batch_y):
                 for j in range(S_W.shape[-1]):
                     new_S_W[:, k, i, j] = x_t[:, i] * (k == j)
                     new_S_W[:, k, i, j] += np.einsum(
-                        "n,bn,bn->b", R[k], dtanh(s_t), S_W[:, :, i, j]
+                        "n,bn,bn->b", R[k], dtanh(s_t_minus_1), S_W[:, :, i, j]
                     )
-                    # for n in range(hidden_size):
-                    #     new_S_W[:, k, i, j] += (
-                    #         R[k, n] * dtanh(s_t[:, n]) * S_W[:, n, i, j]
-                    #     )
         print("S_B")
         new_S_B = np.zeros_like(S_B)
         for k in range(hidden_size):
             for j in range(S_B.shape[-1]):
-                new_S_B[:, k, j] = (j == k)
+                new_S_B[:, k, j] = j == k
                 new_S_B[:, k, j] += np.einsum(
-                    "n,bn,bn->b", R[k], dtanh(s_t), S_B[:, :, j]
+                    "n,bn,bn->b", R[k], dtanh(s_t_minus_1), S_B[:, :, j]
                 )
         print("S_R")
         new_S_R = np.zeros_like(S_R)
@@ -149,14 +150,8 @@ def rtrl_grads(state, batch_x, batch_y):
                 for j in range(S_R.shape[-1]):
                     new_S_R[:, k, i, j] = np.sum(h_t, axis=1) * (i == k)
                     new_S_R[:, k, i, j] += np.einsum(
-                        "n,bn,bn->b", R[k], dtanh(s_t), S_R[:, :, i, j]
+                        "n,bn,bn->b", R[k], dtanh(s_t_minus_1), S_R[:, :, i, j]
                     )
-
-                    # for n in range(hidden_size):
-                    #     new_S_R[:, k, i, j] += (
-                    #         (h_t[:, n] * (i == k and j == n))
-                    #         + (R[k, n] * dtanh(s_t[:, n]) * S_R[:, n, i, j])
-                    #     )
 
         # S_Wの更新：new_S_W[b,k,i,j] = x_t[b,i]*δ_{k,j} + Σ_n R[k,n]*dtanh(s_t[b,n])*S_W[b,n,i,j]
         # new_S_W = jnp.einsum("bi,kj->bkij", x_t, jnp.eye(hidden_size)) + jnp.einsum(
