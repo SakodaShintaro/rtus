@@ -136,13 +136,10 @@ def rtrl_grads(state, batch_x, batch_y):
                         "n,bn,bn->b", R[k], dtanh(s_t_minus_1), S_W[:, :, i, j]
                     )
         print("S_B")
-        new_S_B = np.zeros_like(S_B)
-        for k in range(hidden_size):
-            for j in range(S_B.shape[-1]):
-                new_S_B[:, k, j] = j == k
-                new_S_B[:, k, j] += np.einsum(
-                    "n,bn,bn->b", R[k], dtanh(s_t_minus_1), S_B[:, :, j]
-                )
+        new_S_B = np.eye(hidden_size)[None, :, :] + np.einsum(
+            "kn,bn,bnj->bkj", R, dtanh(s_t_minus_1), S_B
+        )
+
         print("S_R")
         new_S_R = np.zeros_like(S_R)
         for k in range(hidden_size):
@@ -166,10 +163,6 @@ def rtrl_grads(state, batch_x, batch_y):
         S_W = jnp.array(new_S_W)
         S_B = jnp.array(new_S_B)
         S_R = jnp.array(new_S_R)
-
-        print(f"{S_W.shape=}")
-        print(f"{S_B.shape=}")
-        print(f"{S_R.shape=}")
 
         curr_grad_W = jnp.einsum("bh,bhij->bij", dl_ds, S_W)
         curr_grad_B = jnp.einsum("bh,bhj->bj", dl_ds, S_B)
