@@ -6,7 +6,7 @@ $$\newcommand{\bs}{\boldsymbol}$$
 
 <https://arxiv.org/abs/2305.19044>
 
-`flax.linen.SimpleCell` だとバイアスがあり、また実装する上では入力データなどが横ベクトルであるとした方が自然であるため（最初の次元にはバッチサイズが来ることが多いため）定式化が微妙に異なります。[以前]()の繰り返しのようになりますが、RTRLの式から再度書いていきます。
+`flax.linen.SimpleCell` だとバイアスがあり、また実装する上では入力データなどが横ベクトルであるとした方が自然であるため（最初の次元にはバッチサイズが来ることが多いため）定式化が微妙に異なります。[以前](https://tokumini.hatenablog.com/entry/2025/02/23/120000)の繰り返しのようになりますが、RTRLの式から再度書いていきます。
 
 まず時系列的な入力 $\bs{x}(t) \in \mathbb{R} ^ {D}$ を、内部状態 $\bs{s}(t), \bs{h}(t) \in \mathbb{R} ^ {N}$ を持つ再帰的ニューラルネットワーク(RNN)で処理することを考えます。入力に対する重みとバイアスを $\bs{W} \in \mathbb{R} ^ {D \times N}, \bs{B} \in \mathbb{R} ^ {N}$ および再帰成分の重みを $\bs{R} \in \mathbb{R} ^ {N \times N}$ 、要素ごとの活性化関数を $\sigma$ として
 
