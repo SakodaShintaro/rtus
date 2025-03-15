@@ -82,15 +82,6 @@ def rtrl_grads(state, batch_x, batch_y):
 
     loss = 0.0
 
-    # 各ステップの勾配和
-    # dL_{total}(1,T)/dW = \sum _ {t=1} ^ {T} dL_{t}/dW
-    # dL_{t}/dW = \sum _ {k=1} ^{N} (dL_{t}/dh_{t} * dh_{t}/dW)
-    # つまり以下の2つで勾配が計算できる
-    # (a) dL_{t}/dh_{t} : このステップでの損失に対する隠れ状態の勾配
-    #     これは普通に計算できる
-    # (b) dh_{t}/dW : 感度行列(S(t))
-    #     これは各ステップで再帰的に計算できる
-
     for t in range(seq_len):
         print(f"{t=}")
         x_t = batch_x[t]
@@ -137,7 +128,7 @@ def rtrl_grads(state, batch_x, batch_y):
                     )
         print("S_B")
         new_S_B = np.eye(hidden_size)[None, :, :] + np.einsum(
-            "kn,bn,bnj->bkj", R, dtanh(s_t_minus_1), S_B
+            "nk,bn,bnj->bkj", R, dtanh(s_t_minus_1), S_B
         )
 
         print("S_R")
@@ -149,16 +140,6 @@ def rtrl_grads(state, batch_x, batch_y):
                     new_S_R[:, k, i, j] += np.einsum(
                         "n,bn,bn->b", R[k], dtanh(s_t_minus_1), S_R[:, :, i, j]
                     )
-
-        # S_Wの更新：new_S_W[b,k,i,j] = x_t[b,i]*δ_{k,j} + Σ_n R[k,n]*dtanh(s_t[b,n])*S_W[b,n,i,j]
-        # new_S_W = jnp.einsum("bi,kj->bkij", x_t, jnp.eye(hidden_size)) + jnp.einsum(
-        #     "kn,bn,bnij->bkij", R, dtanh(s_t), S_W
-        # )
-
-        # S_Rの更新：new_S_R[b,k,i,j] = δ_{k,i}*tanh(s_t[b,j]) + Σ_n R[k,n]*dtanh(s_t[b,n])*S_R[b,n,i,j]
-        # new_S_R = jnp.eye(hidden_size)[None, :, :, None] * jnp.tanh(s_t)[
-        #     :, None, None, :
-        # ] + jnp.einsum("kn,bn,nbij->bkij", R, dtanh(s_t), S_R)
 
         S_W = jnp.array(new_S_W)
         S_B = jnp.array(new_S_B)
