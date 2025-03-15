@@ -54,7 +54,6 @@ def rtrl_grads(state, batch_x, batch_y):
     flat_params, unravel_fn = jax.flatten_util.ravel_pytree(params)
     n_params = flat_params.shape[0]
     batch_size = batch_x.shape[1]
-    # SimpleCellの重みサイズから隠れ状態の次元を取得
     hidden_size = params["params"]["SimpleCell_0"]["h"]["kernel"].shape[0]
 
     R = params["params"]["SimpleCell_0"]["h"]["kernel"]
@@ -68,14 +67,13 @@ def rtrl_grads(state, batch_x, batch_y):
     h_t = jnp.zeros((batch_size, hidden_size))
 
     # RNNの更新式は
-    # h(t+1) = \tanh(Wi x + bi + Wh h(t))
+    #   h(t+1) = \tanh(W x + B + R h(t))
 
     # 感度行列 : 隠れ状態に対するパラメータの偏微分を保持 (batch, hidden_size, n_params)
     S_W = jnp.zeros((batch_size, hidden_size, *W.shape))
     S_R = jnp.zeros((batch_size, hidden_size, *R.shape))
 
-    grad_flat = jnp.zeros(n_params)
-    grad_structured = unravel_fn(grad_flat)
+    grad_structured = unravel_fn(jnp.zeros(n_params))
     seq_len = batch_x.shape[0]
 
     loss = 0.0
@@ -166,14 +164,13 @@ def rtrl_grads(state, batch_x, batch_y):
         curr_grad_W = jnp.einsum("bh,bhij->bij", dl_ds, S_W)
         curr_grad_R = jnp.einsum("bh,bhij->bij", dl_ds, S_R)
 
-        print(grad_structured["params"]["SimpleCell_0"].keys())
         grad_structured["params"]["SimpleCell_0"]["i"]["kernel"] += curr_grad_W
         grad_structured["params"]["SimpleCell_0"]["h"]["kernel"] += curr_grad_R
 
     # 平均損失を返す
     loss = loss / seq_len
 
-    return loss, unravel_fn(grad_flat)
+    return loss, grad_structured
 
 
 if __name__ == "__main__":
