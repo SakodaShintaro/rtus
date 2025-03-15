@@ -8,6 +8,8 @@ $$\newcommand{\bs}{\boldsymbol}$$
 
 `flax.linen.SimpleCell` だとバイアスがあり、また実装する上では入力データなどが横ベクトルであるとした方が自然であるため（最初の次元にはバッチサイズが来ることが多いため）定式化が微妙に異なります。[以前](https://tokumini.hatenablog.com/entry/2025/02/23/120000)の繰り返しのようになりますが、RTRLの式から再度書いていきます。
 
+## 定式化
+
 まず時系列的な入力 $\bs{x}(t) \in \mathbb{R} ^ {D}$ を、内部状態 $\bs{s}(t), \bs{h}(t) \in \mathbb{R} ^ {N}$ を持つ再帰的ニューラルネットワーク(RNN)で処理することを考えます。入力に対する重みとバイアスを $\bs{W} \in \mathbb{R} ^ {D \times N}, \bs{B} \in \mathbb{R} ^ {N}$ および再帰成分の重みを $\bs{R} \in \mathbb{R} ^ {N \times N}$ 、要素ごとの活性化関数を $\sigma$ として
 
 $$
@@ -47,7 +49,7 @@ $$
 $$
 \begin{align}
 \frac{\partial \bs{s} _ k(t)}{\partial \bs{W} _ {i, j}} &= \frac{\partial}{\partial \bs{W} _ {i, j}} \left\lbrack \left(\sum _ {d=1} ^ D \bs{x} _ {d}(t)\bs{W} _ {d, k}\right) + \bs{b} _ k + \sum _ {n=1} ^ N \sigma(\bs{s} _ n(t - 1))\bs{R} _ {n, k} \right\rbrack \\
-&= \bs{x} _ j (t) \mathbb{1} _ {k=i} + \sum _ {n = 1} ^ N \bs{R} _ {n, k} \sigma'(\bs{s} _ n (t - 1)) \frac{\partial \bs{s} _ n(t - 1)}{\partial \bs{W} _ {i, j}}\\
+&= \bs{x} _ i (t) \mathbb{1} _ {j=k} + \sum _ {n = 1} ^ N \bs{R} _ {n, k} \sigma'(\bs{s} _ n (t - 1)) \frac{\partial \bs{s} _ n(t - 1)}{\partial \bs{W} _ {i, j}}\\
 \end{align}
 $$
 
@@ -55,7 +57,7 @@ $$
 
 $$
 \begin{align}
-\frac{\partial \bs{s} _ k(t)}{\partial \bs{B} _ {j}} = \mathbb{1} _ {k=j} + \sum _ {n = 1} ^ N \bs{R} _ {n, k} \sigma'(\bs{s} _ n (t - 1)) \frac{\partial \bs{s} _ n(t - 1)}{\partial \bs{B} _ {j}}
+\frac{\partial \bs{s} _ k(t)}{\partial \bs{B} _ {j}} = \mathbb{1} _ {j=k} + \sum _ {n = 1} ^ N \bs{R} _ {n, k} \sigma'(\bs{s} _ n (t - 1)) \frac{\partial \bs{s} _ n(t - 1)}{\partial \bs{B} _ {j}}
 \end{align}
 $$
 
@@ -73,3 +75,13 @@ $$
 $$
 
 となります。
+
+## 実装
+
+これらの式において $\mathbb{1} _ {j = k}$ は $j=k$ のときだけ $1$ 、それ以外の場合は $0$ となるものなので、単位行列との演算と考えます。 $\bs{I} _ n \in \mathbb{R} ^ {N \times N}$ の単位行列を考えるとして
+
+$$
+\begin{align}
+\frac{\partial \bs{s} _ k(t)}{\partial \bs{W} _ {i, j}} &= \bs{x} _ i (t) \mathbb{1} _ {j=k} + \sum _ {n = 1} ^ N \bs{R} _ {n, k} \sigma'(\bs{s} _ n (t - 1)) \frac{\partial \bs{s} _ n(t - 1)}{\partial \bs{W} _ {i, j}}\\
+\end{align}
+$$
