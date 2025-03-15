@@ -1,12 +1,12 @@
 # 論文
 
-<https://arxiv.org/abs/2305.19044> $\newcommand{\bs}{\boldsymbol}$
+[参考] <https://arxiv.org/abs/2305.19044> $\newcommand{\bs}{\boldsymbol}$
 
-## 適当な式
+`SimpleCell` だとバイアスがあったりするので微妙に異なる。
 
 $$
 \begin{align}
-\bs{s}(t) &= \bs{x}(t)\bs{W} + \bs{h}(t - 1)\bs{R} \\
+\bs{s}(t) &= \bs{x}(t)\bs{W} + \bs{B} + \bs{h}(t - 1)\bs{R} \\
 \bs{h}(t) &= \sigma(\bs{s}(t))
 \end{align}
 $$
@@ -15,7 +15,7 @@ $$
 
 $$
 \begin{align}
-\bs{s} _ k(t) = \sum _ {n=1} ^ D \bs{x} _ {n}(t)\bs{W} _ {k, n} + \sum _ {n=1} ^ N \sigma(\bs{s} _ n(t - 1))\bs{R} _ {k, n}
+\bs{s} _ k(t) = \sum _ {n=1} ^ D \bs{x} _ {n}(t)\bs{W} _ {k, n} + \bs{b} _ k + \sum _ {n=1} ^ N \sigma(\bs{s} _ n(t - 1))\bs{R} _ {k, n}
 \end{align}
 $$
 
@@ -39,6 +39,12 @@ $$
 $$
 
 と再帰的に求まる。同様に
+
+$$
+\begin{align}
+\frac{\partial \bs{s} _ k(t)}{\partial \bs{b} _ {j}} = \mathbb{1} _ {k=j} + \sum _ {n = 1} ^ N \bs{R} _ {k, n} \sigma'(\bs{s} _ n (t - 1)) \frac{\partial \bs{s} _ n(t - 1)}{\partial \bs{W} _ {i, j}}
+\end{align}
+$$
 
 $$
 \begin{align}
