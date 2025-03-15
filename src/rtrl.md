@@ -42,7 +42,7 @@ $$
 
 $$
 \begin{align}
-\frac{\partial \bs{s} _ k(t)}{\partial \bs{b} _ {j}} = \mathbb{1} _ {k=j} + \sum _ {n = 1} ^ N \bs{R} _ {k, n} \sigma'(\bs{s} _ n (t - 1)) \frac{\partial \bs{s} _ n(t - 1)}{\partial \bs{W} _ {i, j}}
+\frac{\partial \bs{s} _ k(t)}{\partial \bs{b} _ {j}} = \mathbb{1} _ {k=j} + \sum _ {n = 1} ^ N \bs{R} _ {k, n} \sigma'(\bs{s} _ n (t - 1)) \frac{\partial \bs{s} _ n(t - 1)}{\partial \bs{b} _ {j}}
 \end{align}
 $$
 
