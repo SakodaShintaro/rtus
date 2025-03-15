@@ -46,15 +46,21 @@ def bptt_grads(state, batch_x, batch_y):
 
 def rtrl_grads(state, batch_x, batch_y):
     params = state.params
-    model = state.apply_fn
     flat_params, unravel_fn = jax.flatten_util.ravel_pytree(params)
     n_params = flat_params.shape[0]
     batch_size = batch_x.shape[1]
     # SimpleCellの重みサイズから隠れ状態の次元を取得
     hidden_size = params["params"]["SimpleCell_0"]["h"]["kernel"].shape[0]
 
+    Wh = params["params"]["SimpleCell_0"]["h"]["kernel"]
+    Wi = params["params"]["SimpleCell_0"]["i"]["kernel"]
+    Wi_b = params["params"]["SimpleCell_0"]["i"]["bias"]
+
+    Wy = params["params"]["Dense_0"]["kernel"]
+    Wy_b = params["params"]["Dense_0"]["bias"]
+
     # 最初のキャリー状態を初期化
-    h = jnp.zeros((batch_size, hidden_size))
+    h_t = jnp.zeros((batch_size, hidden_size))
 
     # RNNの更新式は
     # h(t+1) = \tanh(Wi x + bi + Wh h(t))
@@ -78,18 +84,23 @@ def rtrl_grads(state, batch_x, batch_y):
     #     要するにh(t-1)を定数だと思って、かつS(t)をかけたものの勾配を求める
 
     for t in range(seq_len):
-        xt = batch_x[t]
-        yt = batch_y[t]
+        x_t = batch_x[t]
+        y_t_ref = batch_y[t]
 
-        # (a) dL_{t}/dh_{t} : このステップでの損失に対する隠れ状態の勾配
-        def step_loss_fn(h):
-            _, y_pred = model(params, h, xt)
-            return jnp.mean((y_pred - yt) ** 2)
-        loss, grads_dL_dh = jax.value_and_grad(step_loss_fn)(h)
-        # print(grads_dL_dh.shape)  (1, 20)
+        # print(f"{Wi.shape=}")  # (5, 20)
+        # print(f"{x_t.shape=}")  # (1, 5)
+        # print(f"{Wi_b.shape=}")  # (20,)
+        # print(f"{Wh.shape=}")  # (20, 20)
+        # print(f"{h.shape=}")  # (1, 20)
+        # print(f"{Wy.shape=}")  # (20, 5)
+        # print(f"{Wy_b.shape=}")  # (5,)
+        # print(f"{y_t_ref.shape=}")  # (1, 5)
 
-        # (b) dh_{t}/dW : 感度行列(S(t))
-        # これのためにはWiに対する勾配とh(t-1)に対する黄梅を求めてSと組み合わせてどうにかするとできそう
+        s_t = jnp.dot(x_t, Wi) + Wi_b + jnp.dot(h_t, Wh)
+        h_t = jnp.tanh(s_t)
+        y_t_sub = jnp.dot(h_t, Wy) + Wy_b
+        loss_t = jnp.mean((y_t_sub - y_t_ref) ** 2)
+        loss += loss_t
 
     # 平均損失を返す
     loss = loss / seq_len
