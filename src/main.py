@@ -127,9 +127,10 @@ def rtrl_grads(state, batch_x, batch_y):
         S_B = eye[None, :, :] + jnp.einsum("nk,bn,bnj->bkj", R, d_s, S_B)
 
         print("S_R")
-        S_R = jnp.einsum(
-            "b,ki,h->bkih", jnp.sum(h_t, axis=1), eye, jnp.ones(hidden_size)
-        ) + jnp.einsum("kn,bn,bnih->bkih", R, d_s, S_R)
+        h_t_minus_1 = jnp.tanh(s_t_minus_1)
+        S_R = jnp.einsum("bk,ij->bikj", h_t_minus_1, eye) + jnp.einsum(
+            "nk,bn,bndh->bkdh", R, d_s, S_R
+        )
 
         curr_grad_W = jnp.einsum("bh,bhij->bij", dl_ds, S_W)
         curr_grad_B = jnp.einsum("bh,bhj->bj", dl_ds, S_B)

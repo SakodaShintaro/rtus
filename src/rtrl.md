@@ -48,11 +48,13 @@ $$
 
 $$
 \begin{align}
-\frac{\partial \bs{s} _ k(t)}{\partial \bs{R} _ {i, j}} = \sum _ {n = 1} ^ N
+\frac{\partial \bs{s} _ k(t)}{\partial \bs{R} _ {i, j}} &= \sum _ {n = 1} ^ N
 \left\lbrack
   \left(\sigma(\bs{s} _ n(t - 1))\frac{\partial \bs{R} _ {k, n}}{\partial \bs{R} _ {i, j}}\right)
   +
   \left(\bs{R} _ {k, n} \sigma'(\bs{s} _ n (t - 1)) \frac{\partial \bs{s} _ n(t - 1)}{\partial \bs{R} _ {i, j}}\right)
-\right\rbrack
+\right\rbrack \\
+&= \left(\sigma(\bs{s} _ j (t - 1))\right) \mathbb{1} _ {i=k} + \sum _ {n = 1} ^ N
+  \left(\bs{R} _ {k, n} \sigma'(\bs{s} _ n (t - 1)) \frac{\partial \bs{s} _ n(t - 1)}{\partial \bs{R} _ {i, j}}\right) \\
 \end{align}
 $$
