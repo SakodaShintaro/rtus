@@ -131,12 +131,12 @@ def rtrl_grads(state, batch_x, batch_y):
         )
 
         print("S_R")
-        new_S_R = np.zeros_like(S_R)
-        for k in range(hidden_size):
-            for i in range(S_R.shape[-2]):
-                new_S_R[:, k, i] = np.sum(h_t, axis=1) * (np.ones(hidden_size) * (i == k)) + np.einsum(
-                    "n,bn,bnh->bh", R[k], dtanh(s_t_minus_1), S_R[:, :, i]
-                )
+        new_S_R = np.einsum(
+            "b,ki,h->bkih",
+            np.sum(h_t, axis=1),
+            np.eye(hidden_size),
+            np.ones(hidden_size),
+        ) + np.einsum("nk,bn,bnih->bkih", R, dtanh(s_t_minus_1), S_R)
 
         S_W = jnp.array(new_S_W)
         S_B = jnp.array(new_S_B)
