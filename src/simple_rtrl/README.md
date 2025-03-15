@@ -55,7 +55,7 @@ $$
 
 $$
 \begin{align}
-\frac{\partial \bs{s} _ k(t)}{\partial \bs{b} _ {j}} = \mathbb{1} _ {k=j} + \sum _ {n = 1} ^ N \bs{R} _ {k, n} \sigma'(\bs{s} _ n (t - 1)) \frac{\partial \bs{s} _ n(t - 1)}{\partial \bs{b} _ {j}}
+\frac{\partial \bs{s} _ k(t)}{\partial \bs{B} _ {j}} = \mathbb{1} _ {k=j} + \sum _ {n = 1} ^ N \bs{R} _ {n, k} \sigma'(\bs{s} _ n (t - 1)) \frac{\partial \bs{s} _ n(t - 1)}{\partial \bs{B} _ {j}}
 \end{align}
 $$
 
@@ -63,11 +63,13 @@ $$
 \begin{align}
 \frac{\partial \bs{s} _ k(t)}{\partial \bs{R} _ {i, j}} &= \sum _ {n = 1} ^ N
 \left\lbrack
-  \left(\sigma(\bs{s} _ n(t - 1))\frac{\partial \bs{R} _ {k, n}}{\partial \bs{R} _ {i, j}}\right)
+  \left(\sigma(\bs{s} _ n(t - 1))\frac{\partial \bs{R} _ {n, k}}{\partial \bs{R} _ {i, j}}\right)
   +
-  \left(\bs{R} _ {k, n} \sigma'(\bs{s} _ n (t - 1)) \frac{\partial \bs{s} _ n(t - 1)}{\partial \bs{R} _ {i, j}}\right)
+  \left(\bs{R} _ {n, k} \sigma'(\bs{s} _ n (t - 1)) \frac{\partial \bs{s} _ n(t - 1)}{\partial \bs{R} _ {i, j}}\right)
 \right\rbrack \\
-&= \left(\sigma(\bs{s} _ j (t - 1))\right) \mathbb{1} _ {i=k} + \sum _ {n = 1} ^ N
+&= \left(\sigma(\bs{s} _ j (t - 1))\right) \mathbb{1} _ {j=k} + \sum _ {n = 1} ^ N
   \left(\bs{R} _ {k, n} \sigma'(\bs{s} _ n (t - 1)) \frac{\partial \bs{s} _ n(t - 1)}{\partial \bs{R} _ {i, j}}\right) \\
 \end{align}
 $$
+
+となります。
