@@ -1,9 +1,16 @@
+import jax.numpy as jnp
+
 import flax.linen as nn
 import flax
 
 # documents for custom_vjp
 # jax) https://docs.jax.dev/en/latest/_autosummary/jax.custom_vjp.html
 # flax) https://flax.readthedocs.io/en/v0.5.3/_autosummary/flax.linen.vjp.html
+
+# 3つのクラスを実装する
+# (1) Feedforwardだけを定義したRtrlRNNCellFwd
+# (2) custom_vjpを定義したRtrlRNNModel
+# (3) 活性化関数などを追加したRtrlRNNLayer
 
 
 class RtrlRNNCellFwd(nn.Module):
@@ -50,3 +57,21 @@ class RtrlRNNModel(nn.Module):
         carry, hidden = vjp_fn(model_fn, carry, x_t)
         carry = carry[0]  # we don't need to forward sensitivity matrix to next module
         return carry, hidden
+
+
+class RtrlRNNLayer(nn.Module):
+    n_hidden: int  # number of hidden features
+    activation: str = "relu"
+
+    @nn.compact
+    def __call__(self, carry, x_t):
+        update_gate = RtrlRNNModel(self.n_hidden)
+        carry, hidden = update_gate(carry, x_t)
+        h_t = nn.tanh(hidden)
+        return h_t, h_t
+
+    @staticmethod
+    def initialize_state(batch_size, d_rec, d_input):
+        hidden_init = (jnp.zeros((batch_size, d_rec)), jnp.zeros((batch_size, d_rec)))
+        memory_grad_init = ()
+        return (hidden_init, memory_grad_init)
