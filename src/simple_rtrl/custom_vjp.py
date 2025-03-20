@@ -11,10 +11,9 @@ from functools import partial
 # jax) https://docs.jax.dev/en/latest/_autosummary/jax.custom_vjp.html
 # flax) https://flax.readthedocs.io/en/v0.5.3/_autosummary/flax.linen.vjp.html
 
-# 3つのクラスを実装する
+# 2つのクラスを実装する
 # (1) Feedforwardだけを定義したRtrlRNNCellFwd
-# (2) custom_vjpを定義したRtrlRNNModel
-# (3) 活性化関数などを追加したRtrlRNNLayer
+# (2) custom_vjpを定義したRtrlCell
 
 
 def print_dict_tree(d, indent=0):
