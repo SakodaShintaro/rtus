@@ -121,7 +121,10 @@ def rtrl_loss_fn(params, model, x, y):
     hidden_size = params["params"]["RtrlRNNModel_0"]["RtrlRNNCellFwd_0"][
         "SimpleCell_0"
     ]["h"]["kernel"].shape[0]
-    initial_carry = jnp.zeros((batch_size, hidden_size))
+    initial_carry = (
+        jnp.zeros((batch_size, hidden_size)),
+        jnp.zeros((batch_size, hidden_size)),
+    )
 
     # scanでシーケンス全体に対して処理を適用
     step_fn = partial(model, params)
