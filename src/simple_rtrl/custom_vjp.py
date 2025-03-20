@@ -1,3 +1,4 @@
+import flax.linen
 import jax
 import jax.numpy as jnp
 from flax.training import train_state
@@ -38,7 +39,8 @@ class RtrlRNNCellFwd(nn.Module):
 
     @nn.compact
     def __call__(self, carry, x):
-        prev_h, prev_sensitivity_matrix = carry
+        prev_s, prev_sensitivity_matrix = carry
+        prev_h = flax.linen.activation.tanh(prev_s)
 
         dense_h = partial(
             Dense,
@@ -57,13 +59,13 @@ class RtrlRNNCellFwd(nn.Module):
         )
 
         # update hidden state
-        curr_h = dense_i(name="i")(x) + dense_h(name="h")(prev_h)
-        curr_h = flax.linen.activation.tanh(curr_h)
+        curr_s = dense_i(name="i")(x) + dense_h(name="h")(prev_h)
+        curr_out = flax.linen.activation.tanh(curr_s)
 
         # update sensitivity matrix (TODO)
         curr_sensitivity_matrix = prev_sensitivity_matrix
 
-        return (curr_h, curr_sensitivity_matrix), curr_h
+        return (curr_s, curr_sensitivity_matrix), curr_out
 
 
 class RtrlCell(nn.Module):
