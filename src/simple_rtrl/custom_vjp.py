@@ -64,7 +64,6 @@ class RtrlCell(nn.Module):
         vjp_fn = nn.custom_vjp(f, forward_fn=fwd, backward_fn=bwd)
         model_fn = RtrlRNNCellFwd(hidden_size=self.hidden_size)
         carry, hidden = vjp_fn(model_fn, carry, x_t)
-        carry = carry[0]  # we don't need to forward sensitivity matrix to next module
         return carry, hidden
 
     @staticmethod
@@ -85,9 +84,6 @@ def bptt_loss_fn(params, model, x, y):
     # scanでシーケンス全体に対して処理を適用
     step_fn = partial(model, params)
     _, y_pred = jax.lax.scan(step_fn, initial_carry, x)
-
-    print(f"{y_pred.shape=}")
-    print(f"{y.shape=}")
 
     # MSE損失を計算
     loss = jnp.mean((y_pred - y) ** 2)
@@ -118,9 +114,6 @@ def rtrl_loss_fn(params, model, x, y):
     # scanでシーケンス全体に対して処理を適用
     step_fn = partial(model, params)
     _, y_pred = jax.lax.scan(step_fn, initial_carry, x)
-
-    print(f"{y_pred.shape=}")
-    print(f"{y.shape=}")
 
     # MSE損失を計算
     loss = jnp.mean((y_pred - y) ** 2)
@@ -193,26 +186,29 @@ if __name__ == "__main__":
     loss_diff = jnp.abs(loss_bptt - loss_rtrl)
     print(f"{loss_diff=}")
 
-    grads_bptt_Wy = grads_bptt["params"]["Dense_0"]["kernel"]
-    grads_rtrl_Wy = grads_rtrl["params"]["Dense_0"]["kernel"]
-    grads_diff_Wy = jnp.abs(grads_bptt_Wy - grads_rtrl_Wy)
-    grads_diff_Wy = jnp.mean(grads_diff_Wy)
-    print(f"{grads_diff_Wy=}")
+    print("grads_rtrl:")
+    print_dict_tree(grads_rtrl)
+    print("grads_bptt:")
+    print_dict_tree(grads_bptt)
 
-    grads_bptt_W = grads_bptt["params"]["SimpleCell_0"]["i"]["kernel"]
-    grads_rtrl_W = grads_rtrl["params"]["SimpleCell_0"]["i"]["kernel"]
+    grads_bptt_W = grads_bptt["params"]["i"]["kernel"]
+    grads_rtrl_W = grads_rtrl["params"]["RtrlRNNCellFwd_0"]["SimpleCell_0"]["i"][
+        "kernel"
+    ]
     grads_diff_W = jnp.abs(grads_bptt_W - grads_rtrl_W)
     grads_diff_W = jnp.mean(grads_diff_W)
     print(f"{grads_diff_W=}")
 
-    grads_bptt_B = grads_bptt["params"]["SimpleCell_0"]["i"]["bias"]
-    grads_rtrl_B = grads_rtrl["params"]["SimpleCell_0"]["i"]["bias"]
+    grads_bptt_B = grads_bptt["params"]["i"]["bias"]
+    grads_rtrl_B = grads_rtrl["params"]["RtrlRNNCellFwd_0"]["SimpleCell_0"]["i"]["bias"]
     grads_diff_B = jnp.abs(grads_bptt_B - grads_rtrl_B)
     grads_diff_B = jnp.mean(grads_diff_B)
     print(f"{grads_diff_B=}")
 
-    grads_bptt_R = grads_bptt["params"]["SimpleCell_0"]["h"]["kernel"]
-    grads_rtrl_R = grads_rtrl["params"]["SimpleCell_0"]["h"]["kernel"]
+    grads_bptt_R = grads_bptt["params"]["h"]["kernel"]
+    grads_rtrl_R = grads_rtrl["params"]["RtrlRNNCellFwd_0"]["SimpleCell_0"]["h"][
+        "kernel"
+    ]
     grads_diff_R = jnp.abs(grads_bptt_R - grads_rtrl_R)
     grads_diff_R = jnp.mean(grads_diff_R)
     print(f"{grads_diff_R=}")
