@@ -98,34 +98,34 @@ def bptt_grads(state, batch_x, batch_y):
     return loss, grads
 
 
-def rtrl_loss_fn(params, model, x, y):
-    # x shape: [seq_len, batch_size, input_dim]
-    batch_size = x.shape[1]
+def rtrl_grads(state, batch_x, batch_y):
+    params = state.params
+    flat_params, unravel_fn = jax.flatten_util.ravel_pytree(params)
+    n_params = flat_params.shape[0]
+    grad_structured = unravel_fn(jnp.zeros(n_params))
+    seq_len = batch_x.shape[0]
 
     # 最初のキャリー状態を初期化
     hidden_size = params["params"]["RtrlRNNCellFwd_0"]["SimpleCell_0"]["h"][
         "kernel"
     ].shape[0]
-    initial_carry = (
+    carry = (
         jnp.zeros((batch_size, hidden_size)),
         jnp.zeros((batch_size, hidden_size)),
     )
 
-    # scanでシーケンス全体に対して処理を適用
-    step_fn = partial(model, params)
-    _, y_pred = jax.lax.scan(step_fn, initial_carry, x)
+    loss = 0.0
 
-    # MSE損失を計算
-    loss = jnp.mean((y_pred - y) ** 2)
-    return loss
+    for t in range(seq_len):
+        print(f"{t=}")
+        x_t = batch_x[t]
+        y_t_ref = batch_y[t]
+        carry, hidden = state.apply_fn(params, carry, x_t)
+        curr_loss = jnp.mean((hidden - y_t_ref) ** 2)
+        loss += curr_loss
 
-
-@jax.jit
-def rtrl_grads(state, batch_x, batch_y):
-    loss, grads = jax.value_and_grad(rtrl_loss_fn)(
-        state.params, state.apply_fn, batch_x, batch_y
-    )
-    return loss, grads
+    loss = loss / seq_len
+    return loss, grad_structured
 
 
 if __name__ == "__main__":
