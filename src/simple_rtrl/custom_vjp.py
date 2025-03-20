@@ -27,6 +27,15 @@ def print_dict_tree(d, indent=0):
             print_dict_tree(value, indent + 1)
 
 
+def print_tuple_tree(t, indent=0):
+    for i, value in enumerate(t):
+        print("  " * indent + str(i))
+        if isinstance(value, tuple):
+            print_tuple_tree(value, indent + 1)
+        else:
+            print("  " * (indent + 1) + str(value.shape))
+
+
 class RtrlRNNCellFwd(nn.Module):
     hidden_size: int
     kernel_init: Initializer = default_kernel_init
@@ -79,6 +88,9 @@ class RtrlRNNCellFwd(nn.Module):
         S_R = jnp.einsum("bi,jk->bkij", prev_h, eye) + jnp.einsum(
             "nk,bn,bnij->bkij", R, d_s, S_R
         )
+        S_W = jax.lax.stop_gradient(S_W)
+        S_B = jax.lax.stop_gradient(S_B)
+        S_R = jax.lax.stop_gradient(S_R)
         curr_sensitivity_matrices = (S_R, S_W, S_B)
 
         return (curr_s, curr_sensitivity_matrices), curr_out
@@ -99,10 +111,17 @@ class RtrlCell(nn.Module):
             return f_out, (vjp_func, f_out[0][1])
 
         def bwd(residuals, y_t):
-            vjp_func, sensitivity_matrix = residuals
+            vjp_func, sensitivity_matrices = residuals
             params_t, *inputs_t = vjp_func(y_t)
             params_t1 = flax.core.unfreeze(params_t)
-            # fix params_t1
+            (S_R, S_W, S_B) = sensitivity_matrices
+            y_t = y_t[0][0]
+            curr_grad_W = jnp.einsum("bh,bhij->bij", y_t, S_W)
+            curr_grad_B = jnp.einsum("bh,bhj->bj", y_t, S_B)
+            curr_grad_R = jnp.einsum("bh,bhij->bij", y_t, S_R)
+            params_t1["params"]["i"]["kernel"] = jnp.sum(curr_grad_W, 0)
+            params_t1["params"]["i"]["bias"] = jnp.sum(curr_grad_B, 0)
+            params_t1["params"]["h"]["kernel"] = jnp.sum(curr_grad_R, 0)
             return (params_t1, *inputs_t)
 
         vjp_fn = nn.custom_vjp(f, forward_fn=fwd, backward_fn=bwd)
