@@ -16,6 +16,7 @@ from functools import partial
 # (2) custom_vjpを定義したRtrlRNNModel
 # (3) 活性化関数などを追加したRtrlRNNLayer
 
+
 def print_dict_tree(d, indent=0):
     for key, value in d.items():
         print("  " * indent + str(key))
@@ -40,7 +41,7 @@ class RtrlRNNCellFwd(nn.Module):
         return (curr_h, curr_sensitivity_matrix), curr_out
 
 
-class RtrlRNNModel(nn.Module):
+class RtrlCell(nn.Module):
     hidden_size: int
 
     @nn.compact
@@ -66,17 +67,6 @@ class RtrlRNNModel(nn.Module):
         carry, hidden = vjp_fn(model_fn, carry, x_t)
         carry = carry[0]  # we don't need to forward sensitivity matrix to next module
         return carry, hidden
-
-
-class RtrlRNNLayer(nn.Module):
-    hidden_size: int  # number of hidden features
-
-    @nn.compact
-    def __call__(self, carry, x_t):
-        update_gate = RtrlRNNModel(self.hidden_size)
-        carry, hidden = update_gate(carry, x_t)
-        h_t = nn.tanh(hidden)
-        return h_t, h_t
 
     @staticmethod
     def initialize_state(batch_size, d_rec, d_input):
@@ -118,9 +108,9 @@ def rtrl_loss_fn(params, model, x, y):
     batch_size = x.shape[1]
 
     # 最初のキャリー状態を初期化
-    hidden_size = params["params"]["RtrlRNNModel_0"]["RtrlRNNCellFwd_0"][
-        "SimpleCell_0"
-    ]["h"]["kernel"].shape[0]
+    hidden_size = params["params"]["RtrlRNNCellFwd_0"]["SimpleCell_0"]["h"][
+        "kernel"
+    ].shape[0]
     initial_carry = (
         jnp.zeros((batch_size, hidden_size)),
         jnp.zeros((batch_size, hidden_size)),
@@ -166,7 +156,7 @@ if __name__ == "__main__":
 
     # モデルの初期化
     model_cell_bptt = nn.SimpleCell(features=hidden_size)
-    model_cell_rtrl = RtrlRNNLayer(hidden_size=hidden_size)
+    model_cell_rtrl = RtrlCell(hidden_size=hidden_size)
 
     params_bptt = model_cell_bptt.init(
         init_key,
@@ -193,7 +183,7 @@ if __name__ == "__main__":
     print_dict_tree(params_bptt)
 
     # copy params from bptt to rtrl
-    params_rtrl["params"]["RtrlRNNModel_0"]["RtrlRNNCellFwd_0"]["SimpleCell_0"] = params_bptt["params"]
+    params_rtrl["params"]["RtrlRNNCellFwd_0"]["SimpleCell_0"] = params_bptt["params"]
 
     loss_bptt, grads_bptt = bptt_grads(state_bptt, data_x, data_y)
     loss_rtrl, grads_rtrl = rtrl_grads(state_rtrl, data_x, data_y)
