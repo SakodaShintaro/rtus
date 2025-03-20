@@ -37,9 +37,14 @@ class RtrlRNNCellFwd(nn.Module):
     carry_init: Initializer = initializers.zeros_init()
     residual: bool = False
 
+    @staticmethod
+    @jax.jit
+    def dtanh(x):
+        return 1 - jnp.tanh(x) ** 2
+
     @nn.compact
     def __call__(self, carry, x):
-        prev_s, prev_sensitivity_matrix = carry
+        prev_s, prev_sensitivity_matrices = carry
         prev_h = flax.linen.activation.tanh(prev_s)
 
         dense_h = partial(
@@ -62,10 +67,21 @@ class RtrlRNNCellFwd(nn.Module):
         curr_s = dense_i(name="i")(x) + dense_h(name="h")(prev_h)
         curr_out = flax.linen.activation.tanh(curr_s)
 
-        # update sensitivity matrix (TODO)
-        curr_sensitivity_matrix = prev_sensitivity_matrix
+        # update sensitivity matrices
+        R = self.variables["params"]["h"]["kernel"]
+        (S_R, S_W, S_B) = prev_sensitivity_matrices
+        d_s = self.dtanh(prev_s)
+        eye = jnp.eye(hidden_size)
+        S_W = jnp.einsum("bi,jk->bkij", x, eye) + jnp.einsum(
+            "nk,bn,bnij->bkij", R, d_s, S_W
+        )
+        S_B = eye[None, :, :] + jnp.einsum("nk,bn,bnj->bkj", R, d_s, S_B)
+        S_R = jnp.einsum("bi,jk->bkij", prev_h, eye) + jnp.einsum(
+            "nk,bn,bnij->bkij", R, d_s, S_R
+        )
+        curr_sensitivity_matrices = (S_R, S_W, S_B)
 
-        return (curr_s, curr_sensitivity_matrix), curr_out
+        return (curr_s, curr_sensitivity_matrices), curr_out
 
 
 class RtrlCell(nn.Module):
@@ -97,7 +113,10 @@ class RtrlCell(nn.Module):
     @staticmethod
     def initialize_state(batch_size, d_rec, d_input):
         hidden_init = jnp.zeros((batch_size, d_rec))
-        memory_grad_init = ()
+        S_R = jnp.zeros((batch_size, d_rec, d_rec, d_rec))
+        S_W = jnp.zeros((batch_size, d_rec, d_rec, d_input))
+        S_B = jnp.zeros((batch_size, d_rec, d_input))
+        memory_grad_init = (S_R, S_W, S_B)
         return (hidden_init, memory_grad_init)
 
 
@@ -135,10 +154,7 @@ def rtrl_grads(state, batch_x, batch_y):
 
     # 最初のキャリー状態を初期化
     hidden_size = params["params"]["RtrlRNNCellFwd_0"]["h"]["kernel"].shape[0]
-    carry = (
-        jnp.zeros((batch_size, hidden_size)),
-        jnp.zeros((batch_size, hidden_size)),
-    )
+    carry = RtrlCell.initialize_state(batch_size, hidden_size, hidden_size)
 
     loss = 0.0
 
