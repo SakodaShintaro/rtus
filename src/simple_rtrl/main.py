@@ -66,8 +66,8 @@ def rtrl_grads(state, batch_x, batch_y):
     input_size = W.shape[0]
 
     # 最初のキャリー状態を初期化
-    s_t = jnp.zeros((batch_size, hidden_size))
-    h_t = jnp.tanh(s_t)
+    curr_s = jnp.zeros((batch_size, hidden_size))
+    curr_h = jnp.tanh(curr_s)
 
     # RNNの更新式は
     #   h(t+1) = \tanh(W x + B + R h(t))
@@ -87,8 +87,8 @@ def rtrl_grads(state, batch_x, batch_y):
 
     for t in range(seq_len):
         print(f"{t=}")
-        x_t = batch_x[t]
-        y_t_ref = batch_y[t]
+        curr_x = batch_x[t]
+        curr_y_ref = batch_y[t]
 
         # print(f"{Wi.shape=}")  # (5, 20)
         # print(f"{x_t.shape=}")  # (1, 5)
@@ -99,32 +99,32 @@ def rtrl_grads(state, batch_x, batch_y):
         # print(f"{Wy_b.shape=}")  # (5,)
         # print(f"{y_t_ref.shape=}")  # (1, 5)
 
-        s_t_minus_1 = s_t
+        prev_s = curr_s
 
-        s_t = jnp.dot(x_t, W) + B + jnp.dot(h_t, R)
-        h_t = jnp.tanh(s_t)
-        y_t_sub = jnp.dot(h_t, Wy) + Wy_b
-        loss_t = jnp.mean((y_t_sub - y_t_ref) ** 2)
-        loss += loss_t
+        curr_s = jnp.dot(curr_x, W) + B + jnp.dot(curr_h, R)
+        curr_h = jnp.tanh(curr_s)
+        curr_y_prd = jnp.dot(curr_h, Wy) + Wy_b
+        curr_loss = jnp.mean((curr_y_prd - curr_y_ref) ** 2)
+        loss += curr_loss
 
-        dl_dyt = 2 * (y_t_sub - y_t_ref) / (batch_size * seq_len * input_size)
+        dl_dy = 2 * (curr_y_prd - curr_y_ref) / (batch_size * seq_len * input_size)
         grad_structured["params"]["Dense_0"]["kernel"] += jnp.einsum(
-            "bd,bh->hd", dl_dyt, h_t
+            "bd,bh->hd", dl_dy, curr_h
         )
-        dl_dh = jnp.dot(dl_dyt, Wy.T)
-        dl_ds = dl_dh * (1 - h_t**2)
+        dl_dh = jnp.dot(dl_dy, Wy.T)
+        dl_ds = dl_dh * (1 - curr_h**2)
 
         # 感度行列の更新
-        d_s = dtanh(s_t_minus_1)
+        d_s = dtanh(prev_s)
         eye = jnp.eye(hidden_size)
-        S_W = jnp.einsum("bi,jk->bkij", x_t, eye) + jnp.einsum(
+        S_W = jnp.einsum("bi,jk->bkij", curr_x, eye) + jnp.einsum(
             "nk,bn,bnij->bkij", R, d_s, S_W
         )
 
         S_B = eye[None, :, :] + jnp.einsum("nk,bn,bnj->bkj", R, d_s, S_B)
 
-        h_t_minus_1 = jnp.tanh(s_t_minus_1)
-        S_R = jnp.einsum("bi,jk->bkij", h_t_minus_1, eye) + jnp.einsum(
+        prev_h = jnp.tanh(prev_s)
+        S_R = jnp.einsum("bi,jk->bkij", prev_h, eye) + jnp.einsum(
             "nk,bn,bnij->bkij", R, d_s, S_R
         )
 
