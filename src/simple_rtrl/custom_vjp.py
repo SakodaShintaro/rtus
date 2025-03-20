@@ -194,11 +194,6 @@ if __name__ == "__main__":
     loss_diff = jnp.abs(loss_bptt - loss_rtrl)
     print(f"{loss_diff=}")
 
-    print("grads_rtrl:")
-    print_dict_tree(grads_rtrl)
-    print("grads_bptt:")
-    print_dict_tree(grads_bptt)
-
     grads_bptt_W = grads_bptt["params"]["i"]["kernel"]
     grads_rtrl_W = grads_rtrl["params"]["RtrlRNNCellFwd_0"]["SimpleCell_0"]["i"][
         "kernel"
