@@ -50,7 +50,7 @@ class RtrlCell(nn.Module):
 
         def fwd(mdl, carry, x_t):
             f_out, vjp_func = nn.vjp(f, mdl, carry, x_t)
-            # f_out = (rnn_out, sensitivity_matrix)
+            # f_out = (curr_h, curr_sensitivity_matrix), curr_out
             # we need sensitivity_matrix for backward pass
             return f_out, (vjp_func, f_out[0][1])
 
