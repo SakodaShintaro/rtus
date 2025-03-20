@@ -178,15 +178,15 @@ def rtrl_grads(state, batch_x, batch_y):
     loss = 0.0
 
     def step_loss_fn(params, carry, x_t, y_t_ref):
-        carry, hidden = state.apply_fn(params, carry, x_t)
-        curr_loss = jnp.mean((hidden - y_t_ref) ** 2)
-        return curr_loss, (carry, hidden)
+        carry, out = state.apply_fn(params, carry, x_t)
+        curr_loss = jnp.mean((out - y_t_ref) ** 2)
+        return curr_loss, carry
 
     for t in range(seq_len):
         print(f"{t=}")
         x_t = batch_x[t]
         y_t_ref = batch_y[t]
-        (curr_loss, (carry, hidden)), grads = jax.value_and_grad(
+        (curr_loss, carry), grads = jax.value_and_grad(
             step_loss_fn, has_aux=True
         )(params, carry, x_t, y_t_ref)
         curr_flat_grads, _ = jax.flatten_util.ravel_pytree(grads)
