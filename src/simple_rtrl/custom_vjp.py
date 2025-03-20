@@ -6,6 +6,9 @@ import flax
 import optax
 import numpy as np
 from functools import partial
+from flax.linen.linear import Dense, default_kernel_init
+from flax.typing import Dtype, Initializer
+from flax.linen import initializers
 
 # documents for custom_vjp
 # jax) https://docs.jax.dev/en/latest/_autosummary/jax.custom_vjp.html
@@ -25,19 +28,42 @@ def print_dict_tree(d, indent=0):
 
 class RtrlRNNCellFwd(nn.Module):
     hidden_size: int
+    kernel_init: Initializer = default_kernel_init
+    recurrent_kernel_init: Initializer = initializers.orthogonal()
+    bias_init: Initializer = initializers.zeros_init()
+    dtype: Dtype | None = None
+    param_dtype: Dtype = jnp.float32
+    carry_init: Initializer = initializers.zeros_init()
+    residual: bool = False
 
     @nn.compact
     def __call__(self, carry, x):
         prev_h, prev_sensitivity_matrix = carry
-        rnn = nn.SimpleCell(features=self.hidden_size)
+
+        dense_h = partial(
+            Dense,
+            features=hidden_size,
+            use_bias=False,
+            param_dtype=self.param_dtype,
+            kernel_init=self.recurrent_kernel_init,
+        )
+        dense_i = partial(
+            Dense,
+            features=hidden_size,
+            use_bias=True,
+            param_dtype=self.param_dtype,
+            kernel_init=self.kernel_init,
+            bias_init=self.bias_init,
+        )
 
         # update hidden state
-        curr_h, curr_out = rnn(prev_h, x)
+        curr_h = dense_i(name="i")(x) + dense_h(name="h")(prev_h)
+        curr_h = flax.linen.activation.tanh(curr_h)
 
         # update sensitivity matrix (TODO)
         curr_sensitivity_matrix = prev_sensitivity_matrix
 
-        return (curr_h, curr_sensitivity_matrix), curr_out
+        return (curr_h, curr_sensitivity_matrix), curr_h
 
 
 class RtrlCell(nn.Module):
@@ -106,9 +132,7 @@ def rtrl_grads(state, batch_x, batch_y):
     seq_len = batch_x.shape[0]
 
     # 最初のキャリー状態を初期化
-    hidden_size = params["params"]["RtrlRNNCellFwd_0"]["SimpleCell_0"]["h"][
-        "kernel"
-    ].shape[0]
+    hidden_size = params["params"]["RtrlRNNCellFwd_0"]["h"]["kernel"].shape[0]
     carry = (
         jnp.zeros((batch_size, hidden_size)),
         jnp.zeros((batch_size, hidden_size)),
@@ -183,7 +207,7 @@ if __name__ == "__main__":
     print_dict_tree(params_bptt)
 
     # copy params from bptt to rtrl
-    params_rtrl["params"]["RtrlRNNCellFwd_0"]["SimpleCell_0"] = params_bptt["params"]
+    params_rtrl["params"]["RtrlRNNCellFwd_0"] = params_bptt["params"]
 
     loss_bptt, grads_bptt = bptt_grads(state_bptt, data_x, data_y)
     loss_rtrl, grads_rtrl = rtrl_grads(state_rtrl, data_x, data_y)
@@ -195,23 +219,19 @@ if __name__ == "__main__":
     print(f"{loss_diff=}")
 
     grads_bptt_W = grads_bptt["params"]["i"]["kernel"]
-    grads_rtrl_W = grads_rtrl["params"]["RtrlRNNCellFwd_0"]["SimpleCell_0"]["i"][
-        "kernel"
-    ]
+    grads_rtrl_W = grads_rtrl["params"]["RtrlRNNCellFwd_0"]["i"]["kernel"]
     grads_diff_W = jnp.abs(grads_bptt_W - grads_rtrl_W)
     grads_diff_W = jnp.mean(grads_diff_W)
     print(f"{grads_diff_W=}")
 
     grads_bptt_B = grads_bptt["params"]["i"]["bias"]
-    grads_rtrl_B = grads_rtrl["params"]["RtrlRNNCellFwd_0"]["SimpleCell_0"]["i"]["bias"]
+    grads_rtrl_B = grads_rtrl["params"]["RtrlRNNCellFwd_0"]["i"]["bias"]
     grads_diff_B = jnp.abs(grads_bptt_B - grads_rtrl_B)
     grads_diff_B = jnp.mean(grads_diff_B)
     print(f"{grads_diff_B=}")
 
     grads_bptt_R = grads_bptt["params"]["h"]["kernel"]
-    grads_rtrl_R = grads_rtrl["params"]["RtrlRNNCellFwd_0"]["SimpleCell_0"]["h"][
-        "kernel"
-    ]
+    grads_rtrl_R = grads_rtrl["params"]["RtrlRNNCellFwd_0"]["h"]["kernel"]
     grads_diff_R = jnp.abs(grads_bptt_R - grads_rtrl_R)
     grads_diff_R = jnp.mean(grads_diff_R)
     print(f"{grads_diff_R=}")
