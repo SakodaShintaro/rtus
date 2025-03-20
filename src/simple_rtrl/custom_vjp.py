@@ -186,9 +186,9 @@ def rtrl_grads(state, batch_x, batch_y):
         print(f"{t=}")
         x_t = batch_x[t]
         y_t_ref = batch_y[t]
-        (curr_loss, carry), grads = jax.value_and_grad(
-            step_loss_fn, has_aux=True
-        )(params, carry, x_t, y_t_ref)
+        (curr_loss, carry), grads = jax.value_and_grad(step_loss_fn, has_aux=True)(
+            params, carry, x_t, y_t_ref
+        )
         curr_flat_grads, _ = jax.flatten_util.ravel_pytree(grads)
         grads_flat += curr_flat_grads
         loss += curr_loss
