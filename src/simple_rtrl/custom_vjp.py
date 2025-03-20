@@ -1,7 +1,11 @@
+import jax
 import jax.numpy as jnp
-
+from flax.training import train_state
 import flax.linen as nn
 import flax
+import optax
+import numpy as np
+from functools import partial
 
 # documents for custom_vjp
 # jax) https://docs.jax.dev/en/latest/_autosummary/jax.custom_vjp.html
@@ -12,10 +16,15 @@ import flax
 # (2) custom_vjpを定義したRtrlRNNModel
 # (3) 活性化関数などを追加したRtrlRNNLayer
 
+def print_dict_tree(d, indent=0):
+    for key, value in d.items():
+        print("  " * indent + str(key))
+        if isinstance(value, dict):
+            print_dict_tree(value, indent + 1)
+
 
 class RtrlRNNCellFwd(nn.Module):
     hidden_size: int
-    output_dim: int
 
     @nn.compact
     def __call__(self, carry, x):
@@ -60,18 +69,122 @@ class RtrlRNNModel(nn.Module):
 
 
 class RtrlRNNLayer(nn.Module):
-    n_hidden: int  # number of hidden features
-    activation: str = "relu"
+    hidden_size: int  # number of hidden features
 
     @nn.compact
     def __call__(self, carry, x_t):
-        update_gate = RtrlRNNModel(self.n_hidden)
+        update_gate = RtrlRNNModel(self.hidden_size)
         carry, hidden = update_gate(carry, x_t)
         h_t = nn.tanh(hidden)
         return h_t, h_t
 
     @staticmethod
     def initialize_state(batch_size, d_rec, d_input):
-        hidden_init = (jnp.zeros((batch_size, d_rec)), jnp.zeros((batch_size, d_rec)))
+        hidden_init = jnp.zeros((batch_size, d_rec))
         memory_grad_init = ()
         return (hidden_init, memory_grad_init)
+
+
+def bptt_loss_fn(params, model, x, y):
+    # x shape: [seq_len, batch_size, input_dim]
+    batch_size = x.shape[1]
+
+    # 最初のキャリー状態を初期化
+    hidden_size = params["params"]["h"]["kernel"].shape[0]
+    initial_carry = jnp.zeros((batch_size, hidden_size))
+
+    # scanでシーケンス全体に対して処理を適用
+    step_fn = partial(model, params)
+    _, y_pred = jax.lax.scan(step_fn, initial_carry, x)
+
+    print(f"{y_pred.shape=}")
+    print(f"{y.shape=}")
+
+    # MSE損失を計算
+    loss = jnp.mean((y_pred - y) ** 2)
+    return loss
+
+
+@jax.jit
+def bptt_grads(state, batch_x, batch_y):
+    loss, grads = jax.value_and_grad(bptt_loss_fn)(
+        state.params, state.apply_fn, batch_x, batch_y
+    )
+    return loss, grads
+
+
+if __name__ == "__main__":
+    # グローバルなシードを設定
+    SEED = 0
+    np.random.seed(SEED)
+    rng_key = jax.random.PRNGKey(SEED)
+
+    seq_len = 30
+    batch_size = 1
+    hidden_size = 20
+    num_steps = 100
+
+    # ダミーなランダムデータとして入力データとターゲットデータを作成
+    data_x = np.random.randn(seq_len, batch_size, hidden_size).astype(np.float32)
+    data_y = np.random.randn(seq_len, batch_size, hidden_size).astype(np.float32)
+
+    # JAXのPRNGキーを分割して使用
+    rng_key, init_key = jax.random.split(rng_key)
+
+    # モデルの初期化
+    model_cell_rtrl = RtrlRNNLayer(hidden_size=hidden_size)
+    model_cell_bptt = nn.SimpleCell(features=hidden_size)
+
+    params_rtrl = model_cell_rtrl.init(
+        init_key,
+        model_cell_rtrl.initialize_state(batch_size, hidden_size, hidden_size),
+        jnp.ones((batch_size, hidden_size)),
+    )
+    params_bptt = model_cell_bptt.init(
+        init_key,
+        jnp.ones((batch_size, hidden_size)),
+        jnp.ones((batch_size, hidden_size)),
+    )
+
+    # 訓練状態の作成
+    state = train_state.TrainState.create(
+        apply_fn=model_cell_bptt.apply, params=params_bptt, tx=optax.adam(1e-3)
+    )
+
+    print("params_rtrl:")
+    print_dict_tree(params_rtrl)
+    print("params_bptt:")
+    print_dict_tree(params_bptt)
+
+    loss_bptt, grads_bptt = bptt_grads(state, data_x, data_y)
+    loss_rtrl, grads_rtrl = rtrl_grads(state, data_x, data_y)
+
+    print("BPTT Loss:", loss_bptt)
+    print("RTRL Loss:", loss_rtrl)
+
+    loss_diff = jnp.abs(loss_bptt - loss_rtrl)
+    print(f"{loss_diff=}")
+
+    grads_bptt_Wy = grads_bptt["params"]["Dense_0"]["kernel"]
+    grads_rtrl_Wy = grads_rtrl["params"]["Dense_0"]["kernel"]
+    grads_diff_Wy = jnp.abs(grads_bptt_Wy - grads_rtrl_Wy)
+    grads_diff_Wy = jnp.mean(grads_diff_Wy)
+    print(f"{grads_diff_Wy=}")
+
+    grads_bptt_W = grads_bptt["params"]["SimpleCell_0"]["i"]["kernel"]
+    grads_rtrl_W = grads_rtrl["params"]["SimpleCell_0"]["i"]["kernel"]
+    grads_diff_W = jnp.abs(grads_bptt_W - grads_rtrl_W)
+    grads_diff_W = jnp.mean(grads_diff_W)
+    print(f"{grads_diff_W=}")
+
+    grads_bptt_B = grads_bptt["params"]["SimpleCell_0"]["i"]["bias"]
+    grads_rtrl_B = grads_rtrl["params"]["SimpleCell_0"]["i"]["bias"]
+    grads_diff_B = jnp.abs(grads_bptt_B - grads_rtrl_B)
+    grads_diff_B = jnp.mean(grads_diff_B)
+    print(f"{grads_diff_B=}")
+
+    grads_bptt_R = grads_bptt["params"]["SimpleCell_0"]["h"]["kernel"]
+    grads_rtrl_R = grads_rtrl["params"]["SimpleCell_0"]["h"]["kernel"]
+    grads_diff_R = jnp.abs(grads_bptt_R - grads_rtrl_R)
+    grads_diff_R = jnp.mean(grads_diff_R)
+    print(f"{grads_diff_R=}")
