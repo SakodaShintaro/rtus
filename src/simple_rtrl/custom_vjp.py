@@ -113,6 +113,36 @@ def bptt_grads(state, batch_x, batch_y):
     return loss, grads
 
 
+def rtrl_loss_fn(params, model, x, y):
+    # x shape: [seq_len, batch_size, input_dim]
+    batch_size = x.shape[1]
+
+    # 最初のキャリー状態を初期化
+    hidden_size = params["params"]["RtrlRNNModel_0"]["RtrlRNNCellFwd_0"][
+        "SimpleCell_0"
+    ]["h"]["kernel"].shape[0]
+    initial_carry = jnp.zeros((batch_size, hidden_size))
+
+    # scanでシーケンス全体に対して処理を適用
+    step_fn = partial(model, params)
+    _, y_pred = jax.lax.scan(step_fn, initial_carry, x)
+
+    print(f"{y_pred.shape=}")
+    print(f"{y.shape=}")
+
+    # MSE損失を計算
+    loss = jnp.mean((y_pred - y) ** 2)
+    return loss
+
+
+@jax.jit
+def rtrl_grads(state, batch_x, batch_y):
+    loss, grads = jax.value_and_grad(rtrl_loss_fn)(
+        state.params, state.apply_fn, batch_x, batch_y
+    )
+    return loss, grads
+
+
 if __name__ == "__main__":
     # グローバルなシードを設定
     SEED = 0
@@ -132,23 +162,26 @@ if __name__ == "__main__":
     rng_key, init_key = jax.random.split(rng_key)
 
     # モデルの初期化
-    model_cell_rtrl = RtrlRNNLayer(hidden_size=hidden_size)
     model_cell_bptt = nn.SimpleCell(features=hidden_size)
+    model_cell_rtrl = RtrlRNNLayer(hidden_size=hidden_size)
 
-    params_rtrl = model_cell_rtrl.init(
-        init_key,
-        model_cell_rtrl.initialize_state(batch_size, hidden_size, hidden_size),
-        jnp.ones((batch_size, hidden_size)),
-    )
     params_bptt = model_cell_bptt.init(
         init_key,
         jnp.ones((batch_size, hidden_size)),
         jnp.ones((batch_size, hidden_size)),
     )
+    params_rtrl = model_cell_rtrl.init(
+        init_key,
+        model_cell_rtrl.initialize_state(batch_size, hidden_size, hidden_size),
+        jnp.ones((batch_size, hidden_size)),
+    )
 
     # 訓練状態の作成
-    state = train_state.TrainState.create(
+    state_bptt = train_state.TrainState.create(
         apply_fn=model_cell_bptt.apply, params=params_bptt, tx=optax.adam(1e-3)
+    )
+    state_rtrl = train_state.TrainState.create(
+        apply_fn=model_cell_rtrl.apply, params=params_rtrl, tx=optax.adam(1e-3)
     )
 
     print("params_rtrl:")
@@ -156,8 +189,11 @@ if __name__ == "__main__":
     print("params_bptt:")
     print_dict_tree(params_bptt)
 
-    loss_bptt, grads_bptt = bptt_grads(state, data_x, data_y)
-    loss_rtrl, grads_rtrl = rtrl_grads(state, data_x, data_y)
+    # copy params from bptt to rtrl
+    params_rtrl["params"]["RtrlRNNModel_0"]["RtrlRNNCellFwd_0"]["SimpleCell_0"] = params_bptt["params"]
+
+    loss_bptt, grads_bptt = bptt_grads(state_bptt, data_x, data_y)
+    loss_rtrl, grads_rtrl = rtrl_grads(state_rtrl, data_x, data_y)
 
     print("BPTT Loss:", loss_bptt)
     print("RTRL Loss:", loss_rtrl)
