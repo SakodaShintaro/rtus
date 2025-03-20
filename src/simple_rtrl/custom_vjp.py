@@ -53,8 +53,8 @@ class RtrlRNNCellFwd(nn.Module):
 
     @nn.compact
     def __call__(self, carry, x):
-        prev_s, prev_sensitivity_matrices = carry
-        prev_h = flax.linen.activation.tanh(prev_s)
+        prev_h, prev_sensitivity_matrices = carry
+        prev_s = jnp.arctanh(prev_h)
 
         dense_h = partial(
             Dense,
@@ -93,7 +93,7 @@ class RtrlRNNCellFwd(nn.Module):
         S_R = jax.lax.stop_gradient(S_R)
         curr_sensitivity_matrices = (S_R, S_W, S_B)
 
-        return (curr_s, curr_sensitivity_matrices), curr_out
+        return (curr_out, curr_sensitivity_matrices), curr_out
 
 
 class RtrlCell(nn.Module):
@@ -107,18 +107,18 @@ class RtrlCell(nn.Module):
         def fwd(mdl, carry, x_t):
             f_out, vjp_func = nn.vjp(f, mdl, carry, x_t)
             # f_out = (curr_h, curr_sensitivity_matrices), curr_out
-            # we need sensitivity_matrices for backward pass
-            return f_out, (vjp_func, f_out[0][1])
+            # we need curr_h and curr_sensitivity_matrices for backward pass
+            return f_out, (vjp_func, f_out[0])
 
         def bwd(residuals, y_t):
-            vjp_func, sensitivity_matrices = residuals
+            vjp_func, (curr_h, sensitivity_matrices) = residuals
             params_t, *inputs_t = vjp_func(y_t)
             params_t1 = flax.core.unfreeze(params_t)
             (S_R, S_W, S_B) = sensitivity_matrices
-            y_t = y_t[0][0]
-            curr_grad_W = jnp.einsum("bh,bhij->bij", y_t, S_W)
-            curr_grad_B = jnp.einsum("bh,bhj->bj", y_t, S_B)
-            curr_grad_R = jnp.einsum("bh,bhij->bij", y_t, S_R)
+            dl_ds = y_t[1] * (1 - curr_h**2)
+            curr_grad_W = jnp.einsum("bh,bhij->bij", dl_ds, S_W)
+            curr_grad_B = jnp.einsum("bh,bhj->bj", dl_ds, S_B)
+            curr_grad_R = jnp.einsum("bh,bhij->bij", dl_ds, S_R)
             params_t1["params"]["i"]["kernel"] = jnp.sum(curr_grad_W, 0)
             params_t1["params"]["i"]["bias"] = jnp.sum(curr_grad_B, 0)
             params_t1["params"]["h"]["kernel"] = jnp.sum(curr_grad_R, 0)
