@@ -102,7 +102,7 @@ def rtrl_grads(state, batch_x, batch_y):
     params = state.params
     flat_params, unravel_fn = jax.flatten_util.ravel_pytree(params)
     n_params = flat_params.shape[0]
-    grad_structured = unravel_fn(jnp.zeros(n_params))
+    grads_flat = jnp.zeros(n_params)
     seq_len = batch_x.shape[0]
 
     # 最初のキャリー状態を初期化
@@ -128,10 +128,12 @@ def rtrl_grads(state, batch_x, batch_y):
         (curr_loss, (carry, hidden)), grads = jax.value_and_grad(
             step_loss_fn, has_aux=True
         )(params, carry, x_t, y_t_ref)
+        curr_flat_grads, _ = jax.flatten_util.ravel_pytree(grads)
+        grads_flat += curr_flat_grads
         loss += curr_loss
 
     loss = loss / seq_len
-    return loss, grad_structured
+    return loss, unravel_fn(grads_flat)
 
 
 if __name__ == "__main__":
