@@ -90,16 +90,8 @@ def rtrl_grads(state, batch_x, batch_y):
         curr_x = batch_x[t]
         curr_y_ref = batch_y[t]
 
-        # print(f"{Wi.shape=}")  # (5, 20)
-        # print(f"{x_t.shape=}")  # (1, 5)
-        # print(f"{Wi_b.shape=}")  # (20,)
-        # print(f"{Wh.shape=}")  # (20, 20)
-        # print(f"{h.shape=}")  # (1, 20)
-        # print(f"{Wy.shape=}")  # (20, 5)
-        # print(f"{Wy_b.shape=}")  # (5,)
-        # print(f"{y_t_ref.shape=}")  # (1, 5)
-
         prev_s = curr_s
+        prev_h = curr_h
 
         curr_s = jnp.dot(curr_x, W) + B + jnp.dot(curr_h, R)
         curr_h = jnp.tanh(curr_s)
@@ -123,7 +115,6 @@ def rtrl_grads(state, batch_x, batch_y):
 
         S_B = eye[None, :, :] + jnp.einsum("nk,bn,bnj->bkj", R, d_s, S_B)
 
-        prev_h = jnp.tanh(prev_s)
         S_R = jnp.einsum("bi,jk->bkij", prev_h, eye) + jnp.einsum(
             "nk,bn,bnij->bkij", R, d_s, S_R
         )
