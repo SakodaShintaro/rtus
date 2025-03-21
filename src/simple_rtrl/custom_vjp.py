@@ -70,7 +70,7 @@ class RtrlCell(nn.Module):
 
         # update hidden state
         curr_s = self.dense_i(x) + self.dense_h(prev_h)
-        curr_out = flax.linen.activation.tanh(curr_s)
+        curr_h = flax.linen.activation.tanh(curr_s)
 
         # update sensitivity matrices
         R = self.variables["params"]["h"]["kernel"]
@@ -89,7 +89,7 @@ class RtrlCell(nn.Module):
         S_R = jax.lax.stop_gradient(S_R)
         curr_sensitivity_matrices = (S_R, S_W, S_B)
 
-        return (curr_out, curr_sensitivity_matrices), curr_out
+        return (curr_h, curr_sensitivity_matrices), curr_h
 
     def __call__(self, carry, x_t):
         def fwd(mdl, carry, x_t):
@@ -175,9 +175,6 @@ def rtrl_grads1(state, batch_x, batch_y):
     S_R = jnp.zeros((batch_size, hidden_size, *R.shape))
     S_W = jnp.zeros((batch_size, hidden_size, *W.shape))
     S_B = jnp.zeros((batch_size, hidden_size, *B.shape))
-    print(f"{S_R.shape=}")
-    print(f"{S_W.shape=}")
-    print(f"{S_B.shape=}")
 
     grad_structured = unravel_fn(jnp.zeros(n_params))
     seq_len = batch_x.shape[0]
@@ -296,11 +293,6 @@ if __name__ == "__main__":
     state_rtrl = train_state.TrainState.create(
         apply_fn=model_cell_rtrl.apply, params=params_rtrl, tx=optax.adam(1e-3)
     )
-
-    print("params_rtrl:")
-    print_dict_tree(params_rtrl)
-    print("params_bptt:")
-    print_dict_tree(params_bptt)
 
     # copy params from bptt to rtrl
     params_rtrl["params"] = params_bptt["params"]
