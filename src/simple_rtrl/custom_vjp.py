@@ -35,6 +35,10 @@ def print_tuple_tree(t, indent=0):
         else:
             print("  " * (indent + 1) + str(value.shape))
 
+@jax.jit
+def dtanh(x):
+    return 1 - jnp.tanh(x) ** 2
+
 
 class RtrlRNNCellFwd(nn.Module):
     hidden_size: int
@@ -45,11 +49,6 @@ class RtrlRNNCellFwd(nn.Module):
     param_dtype: Dtype = jnp.float32
     carry_init: Initializer = initializers.zeros_init()
     residual: bool = False
-
-    @staticmethod
-    @jax.jit
-    def dtanh(x):
-        return 1 - jnp.tanh(x) ** 2
 
     @nn.compact
     def __call__(self, carry, x):
@@ -79,7 +78,7 @@ class RtrlRNNCellFwd(nn.Module):
         # update sensitivity matrices
         R = self.variables["params"]["h"]["kernel"]
         (S_R, S_W, S_B) = prev_sensitivity_matrices
-        d_s = self.dtanh(prev_s)
+        d_s = dtanh(prev_s)
         eye = jnp.eye(hidden_size)
         S_W = jnp.einsum("bi,jk->bkij", x, eye) + jnp.einsum(
             "nk,bn,bnij->bkij", R, d_s, S_W
@@ -164,7 +163,85 @@ def bptt_grads(state, batch_x, batch_y):
     return loss, grads
 
 
-def rtrl_grads(state, batch_x, batch_y):
+def rtrl_grads1(state, batch_x, batch_y):
+    params = state.params
+    flat_params, unravel_fn = jax.flatten_util.ravel_pytree(params)
+    n_params = flat_params.shape[0]
+    batch_size = batch_x.shape[1]
+    hidden_size = params["params"]["RtrlRNNCellFwd_0"]["h"]["kernel"].shape[0]
+
+    R = params["params"]["RtrlRNNCellFwd_0"]["h"]["kernel"]
+    W = params["params"]["RtrlRNNCellFwd_0"]["i"]["kernel"]
+    B = params["params"]["RtrlRNNCellFwd_0"]["i"]["bias"]
+
+    input_size = W.shape[0]
+
+    # 最初のキャリー状態を初期化
+    curr_s = jnp.zeros((batch_size, hidden_size))
+    curr_h = jnp.tanh(curr_s)
+
+    # RNNの更新式は
+    #   h(t+1) = \tanh(W x + B + R h(t))
+
+    # 感度行列 : 隠れ状態に対するパラメータの偏微分を保持 (batch, hidden_size, n_params)
+    S_R = jnp.zeros((batch_size, hidden_size, *R.shape))
+    S_W = jnp.zeros((batch_size, hidden_size, *W.shape))
+    S_B = jnp.zeros((batch_size, hidden_size, *B.shape))
+    print(f"{S_R.shape=}")
+    print(f"{S_W.shape=}")
+    print(f"{S_B.shape=}")
+
+    grad_structured = unravel_fn(jnp.zeros(n_params))
+    seq_len = batch_x.shape[0]
+
+    loss = 0.0
+
+    for t in range(seq_len):
+        print(f"{t=}")
+        curr_x = batch_x[t]
+        curr_y_ref = batch_y[t]
+
+        prev_s = curr_s
+        prev_h = curr_h
+
+        curr_s = jnp.dot(curr_x, W) + B + jnp.dot(curr_h, R)
+        curr_h = jnp.tanh(curr_s)
+        curr_y_prd = curr_h
+        curr_loss = jnp.mean((curr_y_prd - curr_y_ref) ** 2)
+        loss += curr_loss
+
+        dl_dy = 2 * (curr_y_prd - curr_y_ref) / (batch_size * seq_len * input_size)
+        dl_dh = dl_dy
+        dl_ds = dl_dh * (1 - curr_h**2)
+
+        # 感度行列の更新
+        d_s = dtanh(prev_s)
+        eye = jnp.eye(hidden_size)
+        S_W = jnp.einsum("bi,jk->bkij", curr_x, eye) + jnp.einsum(
+            "nk,bn,bnij->bkij", R, d_s, S_W
+        )
+
+        S_B = eye[None, :, :] + jnp.einsum("nk,bn,bnj->bkj", R, d_s, S_B)
+
+        S_R = jnp.einsum("bi,jk->bkij", prev_h, eye) + jnp.einsum(
+            "nk,bn,bnij->bkij", R, d_s, S_R
+        )
+
+        curr_grad_W = jnp.einsum("bh,bhij->bij", dl_ds, S_W)
+        curr_grad_B = jnp.einsum("bh,bhj->bj", dl_ds, S_B)
+        curr_grad_R = jnp.einsum("bh,bhij->bij", dl_ds, S_R)
+
+        grad_structured["params"]["RtrlRNNCellFwd_0"]["i"]["kernel"] += curr_grad_W
+        grad_structured["params"]["RtrlRNNCellFwd_0"]["i"]["bias"] += curr_grad_B
+        grad_structured["params"]["RtrlRNNCellFwd_0"]["h"]["kernel"] += curr_grad_R
+
+    # 平均損失を返す
+    loss = loss / seq_len
+
+    return loss, grad_structured
+
+
+def rtrl_grads2(state, batch_x, batch_y):
     params = state.params
     flat_params, unravel_fn = jax.flatten_util.ravel_pytree(params)
     n_params = flat_params.shape[0]
@@ -247,28 +324,38 @@ if __name__ == "__main__":
     params_rtrl["params"]["RtrlRNNCellFwd_0"] = params_bptt["params"]
 
     loss_bptt, grads_bptt = bptt_grads(state_bptt, data_x, data_y)
-    loss_rtrl, grads_rtrl = rtrl_grads(state_rtrl, data_x, data_y)
+    loss_rtrl1, grads_rtrl1 = rtrl_grads1(state_rtrl, data_x, data_y)
+    loss_rtrl2, grads_rtrl2 = rtrl_grads2(state_rtrl, data_x, data_y)
 
     print("BPTT Loss:", loss_bptt)
-    print("RTRL Loss:", loss_rtrl)
+    print("RTRL Loss1:", loss_rtrl1)
+    print("RTRL Loss2:", loss_rtrl2)
 
-    loss_diff = jnp.abs(loss_bptt - loss_rtrl)
-    print(f"{loss_diff=}")
+    loss_diff1 = jnp.abs(loss_bptt - loss_rtrl1)
+    print(f"{loss_diff1=}")
+    loss_diff2 = jnp.abs(loss_bptt - loss_rtrl2)
+    print(f"{loss_diff2=}")
 
-    grads_bptt_W = grads_bptt["params"]["i"]["kernel"]
-    grads_rtrl_W = grads_rtrl["params"]["RtrlRNNCellFwd_0"]["i"]["kernel"]
-    grads_diff_W = jnp.abs(grads_bptt_W - grads_rtrl_W)
-    grads_diff_W = jnp.mean(grads_diff_W)
-    print(f"{grads_diff_W=}")
+    def compare_grads(grads_rtrl):
+        grads_bptt_W = grads_bptt["params"]["i"]["kernel"]
+        grads_rtrl_W = grads_rtrl["params"]["RtrlRNNCellFwd_0"]["i"]["kernel"]
+        grads_diff_W = jnp.abs(grads_bptt_W - grads_rtrl_W)
+        grads_diff_W = jnp.mean(grads_diff_W)
+        print(f"{grads_diff_W=}")
 
-    grads_bptt_B = grads_bptt["params"]["i"]["bias"]
-    grads_rtrl_B = grads_rtrl["params"]["RtrlRNNCellFwd_0"]["i"]["bias"]
-    grads_diff_B = jnp.abs(grads_bptt_B - grads_rtrl_B)
-    grads_diff_B = jnp.mean(grads_diff_B)
-    print(f"{grads_diff_B=}")
+        grads_bptt_B = grads_bptt["params"]["i"]["bias"]
+        grads_rtrl_B = grads_rtrl["params"]["RtrlRNNCellFwd_0"]["i"]["bias"]
+        grads_diff_B = jnp.abs(grads_bptt_B - grads_rtrl_B)
+        grads_diff_B = jnp.mean(grads_diff_B)
+        print(f"{grads_diff_B=}")
 
-    grads_bptt_R = grads_bptt["params"]["h"]["kernel"]
-    grads_rtrl_R = grads_rtrl["params"]["RtrlRNNCellFwd_0"]["h"]["kernel"]
-    grads_diff_R = jnp.abs(grads_bptt_R - grads_rtrl_R)
-    grads_diff_R = jnp.mean(grads_diff_R)
-    print(f"{grads_diff_R=}")
+        grads_bptt_R = grads_bptt["params"]["h"]["kernel"]
+        grads_rtrl_R = grads_rtrl["params"]["RtrlRNNCellFwd_0"]["h"]["kernel"]
+        grads_diff_R = jnp.abs(grads_bptt_R - grads_rtrl_R)
+        grads_diff_R = jnp.mean(grads_diff_R)
+        print(f"{grads_diff_R=}")
+
+    print("Grads1:")
+    compare_grads(grads_rtrl1)
+    print("Grads2:")
+    compare_grads(grads_rtrl2)
