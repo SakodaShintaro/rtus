@@ -215,6 +215,10 @@ def rtrl_grads1(state, batch_x, batch_y):
         curr_grad_B = jnp.einsum("bh,bhj->bj", dl_ds, S_B)
         curr_grad_R = jnp.einsum("bh,bhij->bij", dl_ds, S_R)
 
+        curr_grad_W = jnp.sum(curr_grad_W, 0)
+        curr_grad_B = jnp.sum(curr_grad_B, 0)
+        curr_grad_R = jnp.sum(curr_grad_R, 0)
+
         grad_structured["params"]["i"]["kernel"] += curr_grad_W
         grad_structured["params"]["i"]["bias"] += curr_grad_B
         grad_structured["params"]["h"]["kernel"] += curr_grad_R
@@ -260,7 +264,7 @@ if __name__ == "__main__":
     rng_key = jax.random.PRNGKey(SEED)
 
     seq_len = 30
-    batch_size = 1
+    batch_size = 2
     hidden_size = 20
     num_steps = 100
 
