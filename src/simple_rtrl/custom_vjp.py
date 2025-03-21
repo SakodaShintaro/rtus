@@ -256,7 +256,7 @@ def rtrl_grads2(state, batch_x, batch_y):
 
     def step_loss_fn(params, carry, x_t, y_t_ref):
         carry, out = state.apply_fn(params, carry, x_t)
-        curr_loss = jnp.mean((out - y_t_ref) ** 2)
+        curr_loss = jnp.mean((out - y_t_ref) ** 2) / seq_len
         return curr_loss, carry
 
     for t in range(seq_len):
@@ -270,7 +270,6 @@ def rtrl_grads2(state, batch_x, batch_y):
         grads_flat += curr_flat_grads
         loss += curr_loss
 
-    loss = loss / seq_len
     return loss, unravel_fn(grads_flat)
 
 
