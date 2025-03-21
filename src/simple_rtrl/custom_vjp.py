@@ -197,7 +197,6 @@ def rtrl_grads1(state, batch_x, batch_y):
     loss = 0.0
 
     for t in range(seq_len):
-        print(f"{t=}")
         curr_x = batch_x[t]
         curr_y_ref = batch_y[t]
 
@@ -207,7 +206,7 @@ def rtrl_grads1(state, batch_x, batch_y):
         curr_s = jnp.dot(curr_x, W) + B + jnp.dot(curr_h, R)
         curr_h = jnp.tanh(curr_s)
         curr_y_prd = curr_h
-        curr_loss = jnp.mean((curr_y_prd - curr_y_ref) ** 2)
+        curr_loss = jnp.mean((curr_y_prd - curr_y_ref) ** 2) / seq_len
         loss += curr_loss
 
         dl_dy = 2 * (curr_y_prd - curr_y_ref) / (batch_size * seq_len * input_size)
@@ -235,9 +234,6 @@ def rtrl_grads1(state, batch_x, batch_y):
         grad_structured["params"]["RtrlRNNCellFwd_0"]["i"]["bias"] += curr_grad_B
         grad_structured["params"]["RtrlRNNCellFwd_0"]["h"]["kernel"] += curr_grad_R
 
-    # 平均損失を返す
-    loss = loss / seq_len
-
     return loss, grad_structured
 
 
@@ -260,7 +256,6 @@ def rtrl_grads2(state, batch_x, batch_y):
         return curr_loss, carry
 
     for t in range(seq_len):
-        print(f"{t=}")
         x_t = batch_x[t]
         y_t_ref = batch_y[t]
         (curr_loss, carry), grads = jax.value_and_grad(step_loss_fn, has_aux=True)(
