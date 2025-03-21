@@ -103,7 +103,8 @@ class RtrlCell(nn.Module):
             params_t, *inputs_t = vjp_func(y_t)
             params_t1 = flax.core.unfreeze(params_t)
             (S_R, S_W, S_B) = sensitivity_matrices
-            dl_ds = y_t[1] * (1 - curr_h**2)
+            dl_dy = y_t[1]
+            dl_ds = dl_dy * (1 - curr_h**2)
             curr_grad_W = jnp.einsum("bh,bhij->bij", dl_ds, S_W)
             curr_grad_B = jnp.einsum("bh,bhj->bj", dl_ds, S_B)
             curr_grad_R = jnp.einsum("bh,bhij->bij", dl_ds, S_R)
