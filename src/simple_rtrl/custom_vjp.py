@@ -92,11 +92,8 @@ class RtrlCell(nn.Module):
         return (curr_out, curr_sensitivity_matrices), curr_out
 
     def __call__(self, carry, x_t):
-        def f(mdl, carry, x_t):
-            return mdl.forward(carry, x_t)
-
         def fwd(mdl, carry, x_t):
-            f_out, vjp_func = nn.vjp(f, mdl, carry, x_t)
+            f_out, vjp_func = nn.vjp(RtrlCell.forward, mdl, carry, x_t)
             # f_out = (curr_h, curr_sensitivity_matrices), curr_out
             # we need curr_h and curr_sensitivity_matrices for backward pass
             return f_out, (vjp_func, f_out[0])
@@ -115,7 +112,7 @@ class RtrlCell(nn.Module):
             params_t1["params"]["h"]["kernel"] = jnp.sum(curr_grad_R, 0)
             return (params_t1, *inputs_t)
 
-        vjp_fn = nn.custom_vjp(f, forward_fn=fwd, backward_fn=bwd)
+        vjp_fn = nn.custom_vjp(RtrlCell.forward, forward_fn=fwd, backward_fn=bwd)
         carry, hidden = vjp_fn(self, carry, x_t)
         return carry, hidden
 
