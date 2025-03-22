@@ -196,13 +196,32 @@ def rtrl_grads(state, batch_x, batch_y):
     return loss, unravel_fn(grads_flat)
 
 
+def make_data(batch_size):
+    # seq_len // 2の長さのシーケンスをコピーするタスク
+    data = np.random.randint(
+        low=0, high=SYMBOL_SIZE - 1, size=(SEQ_LEN // 2, batch_size)
+    )
+    data = np.concatenate([data, data], axis=0)
+
+    mask = np.ones((SEQ_LEN, batch_size))
+    mask[: SEQ_LEN // 2] = 0
+    mask = jnp.array(mask)
+
+    batch_x = deepcopy(data)
+    batch_y = deepcopy(data)
+
+    batch_x[SEQ_LEN // 2 :] = SYMBOL_SIZE
+    batch_x = jax.nn.one_hot(batch_x, SYMBOL_SIZE + 1)
+    return batch_x, batch_y, mask
+
+
 if __name__ == "__main__":
     # グローバルなシードを設定
     SEED = 0
     np.random.seed(SEED)
     rng_key = jax.random.PRNGKey(SEED)
 
-    batch_size = 2
+    batch_size = 32
     hidden_size = SYMBOL_SIZE + 1
 
     # JAXのPRNGキーを分割して使用
@@ -231,30 +250,10 @@ if __name__ == "__main__":
         apply_fn=model_cell_rtrl.apply, params=params_rtrl, tx=optax.adam(1e-3)
     )
 
-    # seq_len // 2の長さのシーケンスをコピーするタスク
-    data = np.random.randint(
-        low=0, high=SYMBOL_SIZE - 1, size=(SEQ_LEN // 2, batch_size)
-    )
-    data = np.concatenate([data, data], axis=0)
-    print(data)
-
-    mask = np.ones((SEQ_LEN, batch_size))
-    mask[: SEQ_LEN // 2] = 0
-    mask = jnp.array(mask)
-    print(mask)
-
-    batch_x = deepcopy(data)
-    batch_y = deepcopy(data)
-
-    batch_x[SEQ_LEN // 2 :] = SYMBOL_SIZE
-    batch_x = jax.nn.one_hot(batch_x, SYMBOL_SIZE + 1)
-
-    print(batch_x)
-    print(batch_y)
-
     # BPTT
-    STEP_NUM = 500
+    STEP_NUM = 1000
     for i in range(STEP_NUM):
+        batch_x, batch_y, mask = make_data(batch_size)
         loss, grads = bptt_grads(
             state_bptt, model_bptt.initialize_carry(), batch_x, batch_y, mask
         )
@@ -267,5 +266,5 @@ if __name__ == "__main__":
     step_fn = partial(state_bptt.apply_fn, state_bptt.params)
     _, y_pred = jax.lax.scan(step_fn, initial_carry, batch_x)
     y_pred_int = jnp.argmax(y_pred, axis=-1)
-    print(f"{y_pred_int[SEQ_LEN // 2:]=}")
-    print(f"{batch_y[SEQ_LEN // 2:]=}")
+    print(f"{y_pred_int[SEQ_LEN // 2:, :5]=}")
+    print(f"{batch_y[SEQ_LEN // 2:, :5]=}")
