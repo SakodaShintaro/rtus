@@ -13,7 +13,7 @@ from flax.linen import initializers
 from copy import deepcopy
 
 SEQ_LEN = 10
-SYMBOL_SIZE = 10
+INPUT_DIM = 10
 
 
 def print_dict_tree(d, indent=0):
@@ -198,9 +198,8 @@ def rtrl_grads(state, batch_x, batch_y):
 
 def make_data(batch_size):
     # seq_len // 2の長さのシーケンスをコピーするタスク
-    data = np.random.randint(
-        low=0, high=SYMBOL_SIZE - 1, size=(SEQ_LEN // 2, batch_size)
-    )
+    # INPUT_DIM - 1はコピー中のxの入力に使うので、INPUT_DIM - 2までで生成
+    data = np.random.randint(low=0, high=INPUT_DIM - 2, size=(SEQ_LEN // 2, batch_size))
     data = np.concatenate([data, data], axis=0)
 
     mask = np.ones((SEQ_LEN, batch_size))
@@ -210,8 +209,8 @@ def make_data(batch_size):
     batch_x = deepcopy(data)
     batch_y = deepcopy(data)
 
-    batch_x[SEQ_LEN // 2 :] = SYMBOL_SIZE
-    batch_x = jax.nn.one_hot(batch_x, SYMBOL_SIZE + 1)
+    batch_x[SEQ_LEN // 2 :] = INPUT_DIM - 1  # コピー中のxの入力
+    batch_x = jax.nn.one_hot(batch_x, INPUT_DIM)
     return batch_x, batch_y, mask
 
 
@@ -222,19 +221,19 @@ if __name__ == "__main__":
     rng_key = jax.random.PRNGKey(SEED)
 
     batch_size = 32
-    hidden_size = SYMBOL_SIZE + 1
+    hidden_size = INPUT_DIM - 1
 
     # JAXのPRNGキーを分割して使用
     rng_key, init_key = jax.random.split(rng_key)
 
     # モデルの初期化
-    model_bptt = SimpleModel(features_hidden=hidden_size - 1, features_out=hidden_size)
+    model_bptt = SimpleModel(features_hidden=hidden_size, features_out=INPUT_DIM)
     model_cell_rtrl = RtrlCell(hidden_size=hidden_size)
 
     params_bptt = model_bptt.init(
         init_key,
         model_bptt.initialize_carry(),
-        jnp.ones((batch_size, hidden_size)),
+        jnp.ones((batch_size, INPUT_DIM)),
     )
     params_rtrl = model_cell_rtrl.init(
         init_key,
