@@ -205,6 +205,8 @@ def make_data(batch_size):
 
     batch_x[SEQ_LEN // 2 :] = INPUT_DIM - 1  # コピー中のxの入力
     batch_x = jax.nn.one_hot(batch_x, INPUT_DIM)
+    batch_x = jnp.array(batch_x)
+    batch_y = jnp.array(batch_y)
     return batch_x, batch_y, mask
 
 
@@ -265,6 +267,7 @@ if __name__ == "__main__":
 
     # RTRL
     print("RTRL")
+    @jax.jit
     def step_loss_fn(params, carry, x_t, y_t_ref):
         carry, out = state_rtrl.apply_fn(params, carry, x_t)
         curr_loss = optax.losses.softmax_cross_entropy_with_integer_labels(out, y_t_ref)
