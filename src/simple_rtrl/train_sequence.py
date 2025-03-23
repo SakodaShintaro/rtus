@@ -267,7 +267,7 @@ if __name__ == "__main__":
     def step_loss_fn(params, carry, x_t, y_t_ref):
         carry, out = state_rtrl.apply_fn(params, carry, x_t)
         curr_loss = optax.losses.softmax_cross_entropy_with_integer_labels(out, y_t_ref)
-        curr_loss = jnp.mean(curr_loss)
+        curr_loss = jnp.mean(curr_loss) / SEQ_LEN
         return curr_loss, carry
 
     for i in range(1, STEP_NUM + 1):
@@ -284,7 +284,7 @@ if __name__ == "__main__":
                     step_loss_fn, has_aux=True
                 )(state_rtrl.params, carry, x_t, y_t_ref)
                 state_rtrl = state_rtrl.apply_gradients(grads=grads)
-                loss += curr_loss.item() / (SEQ_LEN // 2)
+                loss += curr_loss.item()
 
         if i % (STEP_NUM / 10) == 0:
             print(f"{i:08d} {loss}")
