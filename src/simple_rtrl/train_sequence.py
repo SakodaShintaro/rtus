@@ -47,8 +47,8 @@ class SimpleModel(nn.Module):
         y_t = self.dense_out(y_t)
         return carry, y_t
 
-    def initialize_carry(self):
-        return jnp.zeros((batch_size, self.features_hidden))
+    def initialize_carry(self, batch_size, hidden_size):
+        return jnp.zeros((batch_size, hidden_size))
 
 
 class RtrlCell(nn.Module):
@@ -226,7 +226,7 @@ if __name__ == "__main__":
 
     params_bptt = model_bptt.init(
         init_key,
-        model_bptt.initialize_carry(),
+        model_bptt.initialize_carry(batch_size, hidden_size),
         jnp.ones((batch_size, INPUT_DIM)),
     )
     params_rtrl = model_rtrl.init(
@@ -243,21 +243,20 @@ if __name__ == "__main__":
         apply_fn=model_rtrl.apply, params=params_rtrl, tx=optax.adam(1e-2)
     )
 
-    STEP_NUM = 400
+    STEP_NUM = 100
 
     # BPTT
     print("BPTT")
     for i in range(1, STEP_NUM + 1):
         batch_x, batch_y, mask = make_data(batch_size)
-        loss, grads = bptt_grads(
-            state_bptt, model_bptt.initialize_carry(), batch_x, batch_y, mask
-        )
+        carry = model_bptt.initialize_carry(batch_size, hidden_size)
+        loss, grads = bptt_grads(state_bptt, carry, batch_x, batch_y, mask)
         state_bptt = state_bptt.apply_gradients(grads=grads)
         if i % (STEP_NUM / 10) == 0:
             print(f"{i:08d} {loss.item()}")
 
     # 確認
-    initial_carry = model_bptt.initialize_carry()
+    initial_carry = model_bptt.initialize_carry(batch_size, hidden_size)
     step_fn = partial(state_bptt.apply_fn, state_bptt.params)
     _, y_pred = jax.lax.scan(step_fn, initial_carry, batch_x)
     y_pred_int = jnp.argmax(y_pred, axis=-1)
