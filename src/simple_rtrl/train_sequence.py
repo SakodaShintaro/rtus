@@ -244,7 +244,7 @@ if __name__ == "__main__":
     )
 
     # BPTT
-    STEP_NUM = 100
+    STEP_NUM = 200
     for i in range(1, STEP_NUM + 1):
         batch_x, batch_y, mask = make_data(batch_size)
         loss, grads = bptt_grads(
@@ -261,6 +261,9 @@ if __name__ == "__main__":
     y_pred_int = jnp.argmax(y_pred, axis=-1)
     print(f"{y_pred_int[SEQ_LEN // 2:, :5]=}")
     print(f"{batch_y[SEQ_LEN // 2:, :5]=}")
+    # 正答率
+    acc = jnp.mean(jnp.equal(y_pred_int[SEQ_LEN // 2:], batch_y[SEQ_LEN // 2:])).item()
+    print(f"{acc=}")
 
     # RTRL
     def step_loss_fn(params, carry, x_t, y_t_ref):
@@ -269,7 +272,6 @@ if __name__ == "__main__":
         curr_loss = jnp.mean(curr_loss)
         return curr_loss, carry
 
-    STEP_NUM = 100
     for i in range(1, STEP_NUM + 1):
         batch_x, batch_y, mask = make_data(batch_size)
         loss = 0.0
@@ -288,3 +290,20 @@ if __name__ == "__main__":
 
         if i % (STEP_NUM / 10) == 0:
             print(f"{i:08d} {loss=}")
+
+    # 確認
+    batch_x, batch_y, mask = make_data(batch_size)
+    carry = model_rtrl.initialize_carry(batch_size, hidden_size)
+    equal_num = 0
+    for j in range(SEQ_LEN):
+        x_t = batch_x[j]
+        y_t_ref = batch_y[j]
+        carry, y_t = model_rtrl.apply(state_rtrl.params, carry, x_t)
+        if j >= SEQ_LEN // 2:
+            y_t_int = jnp.argmax(y_t, axis=-1)
+            print(f"{y_t_int[:5]=}")
+            print(f"{y_t_ref[:5]=}")
+            # 正答率
+            equal_num += jnp.sum(jnp.equal(y_t_int, y_t_ref))
+    acc = equal_num / (SEQ_LEN // 2 * batch_size)
+    print(f"{acc=}")
