@@ -190,37 +190,6 @@ def bptt_grads(state, batch_carry, batch_x, batch_y, batch_mask):
     return loss, grads
 
 
-def rtrl_grads(state, batch_x, batch_y):
-    params = state.params
-    flat_params, unravel_fn = jax.flatten_util.ravel_pytree(params)
-    n_params = flat_params.shape[0]
-    grads_flat = jnp.zeros(n_params)
-    seq_len = batch_x.shape[0]
-
-    # 最初のキャリー状態を初期化
-    hidden_size = params["params"]["h"]["kernel"].shape[0]
-    carry = RtrlCell.initialize_carry(batch_size, hidden_size, hidden_size)
-
-    loss = 0.0
-
-    def step_loss_fn(params, carry, x_t, y_t_ref):
-        carry, out = state.apply_fn(params, carry, x_t)
-        curr_loss = jnp.mean((out - y_t_ref) ** 2) / seq_len
-        return curr_loss, carry
-
-    for t in range(seq_len):
-        x_t = batch_x[t]
-        y_t_ref = batch_y[t]
-        (curr_loss, carry), grads = jax.value_and_grad(step_loss_fn, has_aux=True)(
-            params, carry, x_t, y_t_ref
-        )
-        curr_flat_grads, _ = jax.flatten_util.ravel_pytree(grads)
-        grads_flat += curr_flat_grads
-        loss += curr_loss
-
-    return loss, unravel_fn(grads_flat)
-
-
 def make_data(batch_size):
     # seq_len // 2の長さのシーケンスをコピーするタスク
     # INPUT_DIM - 1はコピー中のxの入力に使うので、INPUT_DIM - 2までで生成
@@ -263,7 +232,7 @@ if __name__ == "__main__":
     params_rtrl = model_rtrl.init(
         init_key,
         model_rtrl.initialize_carry(batch_size, hidden_size),
-        jnp.ones((batch_size, hidden_size)),
+        jnp.ones((batch_size, INPUT_DIM)),
     )
 
     # 訓練状態の作成
@@ -271,12 +240,12 @@ if __name__ == "__main__":
         apply_fn=model_bptt.apply, params=params_bptt, tx=optax.adam(1e-2)
     )
     state_rtrl = train_state.TrainState.create(
-        apply_fn=model_rtrl.apply, params=params_rtrl, tx=optax.adam(1e-3)
+        apply_fn=model_rtrl.apply, params=params_rtrl, tx=optax.adam(1e-2)
     )
 
     # BPTT
-    STEP_NUM = 1000
-    for i in range(STEP_NUM):
+    STEP_NUM = 100
+    for i in range(1, STEP_NUM + 1):
         batch_x, batch_y, mask = make_data(batch_size)
         loss, grads = bptt_grads(
             state_bptt, model_bptt.initialize_carry(), batch_x, batch_y, mask
@@ -292,3 +261,30 @@ if __name__ == "__main__":
     y_pred_int = jnp.argmax(y_pred, axis=-1)
     print(f"{y_pred_int[SEQ_LEN // 2:, :5]=}")
     print(f"{batch_y[SEQ_LEN // 2:, :5]=}")
+
+    # RTRL
+    def step_loss_fn(params, carry, x_t, y_t_ref):
+        carry, out = state_rtrl.apply_fn(params, carry, x_t)
+        curr_loss = optax.losses.softmax_cross_entropy_with_integer_labels(out, y_t_ref)
+        curr_loss = jnp.mean(curr_loss)
+        return curr_loss, carry
+
+    STEP_NUM = 100
+    for i in range(1, STEP_NUM + 1):
+        batch_x, batch_y, mask = make_data(batch_size)
+        loss = 0.0
+        carry = model_rtrl.initialize_carry(batch_size, hidden_size)
+        for j in range(SEQ_LEN):
+            x_t = batch_x[j]
+            y_t_ref = batch_y[j]
+            if j < SEQ_LEN // 2:
+                carry, y_t = model_rtrl.apply(state_rtrl.params, carry, x_t)
+            else:
+                (curr_loss, carry), grads = jax.value_and_grad(
+                    step_loss_fn, has_aux=True
+                )(state_rtrl.params, carry, x_t, y_t_ref)
+                state_rtrl = state_rtrl.apply_gradients(grads=grads)
+                loss += curr_loss.item() / (SEQ_LEN // 2)
+
+        if i % (STEP_NUM / 10) == 0:
+            print(f"{i:08d} {loss=}")
