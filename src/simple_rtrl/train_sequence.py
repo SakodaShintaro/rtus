@@ -241,17 +241,22 @@ if __name__ == "__main__":
         apply_fn=model_rtrl.apply, params=params_rtrl, tx=optax.adam(1e-2)
     )
 
-    STEP_NUM = 100
+    STEP_NUM = 1000
 
     # BPTT
     print("BPTT")
+    loss_list = []
     for i in range(1, STEP_NUM + 1):
         batch_x, batch_y, mask = make_data(batch_size)
         carry = model_bptt.initialize_carry(batch_size, hidden_size)
         loss, grads = bptt_grads(state_bptt, carry, batch_x, batch_y, mask)
         state_bptt = state_bptt.apply_gradients(grads=grads)
+        loss_list.append(loss.item())
         if i % (STEP_NUM / 10) == 0:
-            print(f"{i:08d} {loss.item()}")
+            loss_avg = sum(loss_list) / len(loss_list)
+            loss_std = np.std(loss_list)
+            loss_list = []
+            print(f"{i:08d} {loss_avg:.5f} {loss_std:.5f}")
 
     # 確認
     initial_carry = model_bptt.initialize_carry(batch_size, hidden_size)
@@ -270,6 +275,7 @@ if __name__ == "__main__":
         curr_loss = jnp.mean(curr_loss) / SEQ_LEN
         return curr_loss, carry
 
+    loss_list = []
     for i in range(1, STEP_NUM + 1):
         batch_x, batch_y, mask = make_data(batch_size)
         loss = 0.0
@@ -286,8 +292,12 @@ if __name__ == "__main__":
                 state_rtrl = state_rtrl.apply_gradients(grads=grads)
                 loss += curr_loss.item()
 
+        loss_list.append(loss)
         if i % (STEP_NUM / 10) == 0:
-            print(f"{i:08d} {loss}")
+            loss_avg = sum(loss_list) / len(loss_list)
+            loss_std = np.std(loss_list)
+            loss_list = []
+            print(f"{i:08d} {loss_avg:.5f} {loss_std:.5f}")
 
     # 確認
     batch_x, batch_y, mask = make_data(batch_size)
