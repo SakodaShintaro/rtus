@@ -243,8 +243,10 @@ if __name__ == "__main__":
         apply_fn=model_rtrl.apply, params=params_rtrl, tx=optax.adam(1e-2)
     )
 
+    STEP_NUM = 400
+
     # BPTT
-    STEP_NUM = 200
+    print("BPTT")
     for i in range(1, STEP_NUM + 1):
         batch_x, batch_y, mask = make_data(batch_size)
         loss, grads = bptt_grads(
@@ -252,20 +254,18 @@ if __name__ == "__main__":
         )
         state_bptt = state_bptt.apply_gradients(grads=grads)
         if i % (STEP_NUM / 10) == 0:
-            print(f"{i:08d} {loss.item()=}")
+            print(f"{i:08d} {loss.item()}")
 
     # 確認
     initial_carry = model_bptt.initialize_carry()
     step_fn = partial(state_bptt.apply_fn, state_bptt.params)
     _, y_pred = jax.lax.scan(step_fn, initial_carry, batch_x)
     y_pred_int = jnp.argmax(y_pred, axis=-1)
-    print(f"{y_pred_int[SEQ_LEN // 2:, :5]=}")
-    print(f"{batch_y[SEQ_LEN // 2:, :5]=}")
-    # 正答率
     acc = jnp.mean(jnp.equal(y_pred_int[SEQ_LEN // 2:], batch_y[SEQ_LEN // 2:])).item()
     print(f"{acc=}")
 
     # RTRL
+    print("RTRL")
     def step_loss_fn(params, carry, x_t, y_t_ref):
         carry, out = state_rtrl.apply_fn(params, carry, x_t)
         curr_loss = optax.losses.softmax_cross_entropy_with_integer_labels(out, y_t_ref)
@@ -289,7 +289,7 @@ if __name__ == "__main__":
                 loss += curr_loss.item() / (SEQ_LEN // 2)
 
         if i % (STEP_NUM / 10) == 0:
-            print(f"{i:08d} {loss=}")
+            print(f"{i:08d} {loss}")
 
     # 確認
     batch_x, batch_y, mask = make_data(batch_size)
@@ -301,9 +301,6 @@ if __name__ == "__main__":
         carry, y_t = model_rtrl.apply(state_rtrl.params, carry, x_t)
         if j >= SEQ_LEN // 2:
             y_t_int = jnp.argmax(y_t, axis=-1)
-            print(f"{y_t_int[:5]=}")
-            print(f"{y_t_ref[:5]=}")
-            # 正答率
-            equal_num += jnp.sum(jnp.equal(y_t_int, y_t_ref))
+            equal_num += jnp.sum(jnp.equal(y_t_int, y_t_ref)).item()
     acc = equal_num / (SEQ_LEN // 2 * batch_size)
     print(f"{acc=}")
