@@ -136,7 +136,7 @@ class RtrlCell(nn.Module):
         return carry, hidden
 
     @staticmethod
-    def initialize_state(batch_size, d_rec, d_input):
+    def initialize_carry(batch_size, d_rec, d_input):
         hidden_init = jnp.zeros((batch_size, d_rec))
         S_R = jnp.zeros((batch_size, d_rec, d_rec, d_rec))
         S_W = jnp.zeros((batch_size, d_rec, d_rec, d_input))
@@ -174,7 +174,7 @@ def rtrl_grads(state, batch_x, batch_y):
 
     # 最初のキャリー状態を初期化
     hidden_size = params["params"]["h"]["kernel"].shape[0]
-    carry = RtrlCell.initialize_state(batch_size, hidden_size, hidden_size)
+    carry = RtrlCell.initialize_carry(batch_size, hidden_size, hidden_size)
 
     loss = 0.0
 
@@ -237,7 +237,7 @@ if __name__ == "__main__":
     )
     params_rtrl = model_cell_rtrl.init(
         init_key,
-        model_cell_rtrl.initialize_state(batch_size, hidden_size, hidden_size),
+        model_cell_rtrl.initialize_carry(batch_size, hidden_size, hidden_size),
         jnp.ones((batch_size, hidden_size)),
     )
 
