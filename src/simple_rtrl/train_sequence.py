@@ -37,12 +37,10 @@ class SimpleModel(nn.Module):
     features_out: int
 
     def setup(self):
-        self.dense_hidden = nn.Dense(features=self.features_hidden)
         self.simple_cell = nn.SimpleCell(features=self.features_hidden)
         self.dense_out = nn.Dense(features=self.features_out)
 
     def __call__(self, carry, x_t):
-        x_t = self.dense_hidden(x_t)
         carry, y_t = self.simple_cell(carry, x_t)
         y_t = self.dense_out(y_t)
         return carry, y_t
@@ -150,21 +148,19 @@ class RtrlModel(nn.Module):
     features_out: int
 
     def setup(self):
-        self.dense_hidden = nn.Dense(features=self.features_hidden)
         self.simple_cell = RtrlCell(hidden_size=self.features_hidden)
         self.dense_out = nn.Dense(features=self.features_out)
 
     def __call__(self, carry, x_t):
-        x_t = self.dense_hidden(x_t)
         carry, y_t = self.simple_cell(carry, x_t)
         y_t = self.dense_out(y_t)
         return carry, y_t
 
     @staticmethod
-    def initialize_carry(batch_size, d_rec):
+    def initialize_carry(batch_size, d_rec, d_inp):
         hidden_init = jnp.zeros((batch_size, d_rec))
         S_R = jnp.zeros((batch_size, d_rec, d_rec, d_rec))
-        S_W = jnp.zeros((batch_size, d_rec, d_rec, d_rec))
+        S_W = jnp.zeros((batch_size, d_rec, d_inp, d_rec))
         S_B = jnp.zeros((batch_size, d_rec, d_rec))
         memory_grad_init = (S_R, S_W, S_B)
         return (hidden_init, memory_grad_init)
@@ -233,7 +229,7 @@ if __name__ == "__main__":
     )
     params_rtrl = model_rtrl.init(
         init_key,
-        model_rtrl.initialize_carry(batch_size, hidden_size),
+        model_rtrl.initialize_carry(batch_size, hidden_size, INPUT_DIM),
         jnp.ones((batch_size, INPUT_DIM)),
     )
 
@@ -277,7 +273,7 @@ if __name__ == "__main__":
     for i in range(1, STEP_NUM + 1):
         batch_x, batch_y, mask = make_data(batch_size)
         loss = 0.0
-        carry = model_rtrl.initialize_carry(batch_size, hidden_size)
+        carry = model_rtrl.initialize_carry(batch_size, hidden_size, INPUT_DIM)
         for j in range(SEQ_LEN):
             x_t = batch_x[j]
             y_t_ref = batch_y[j]
@@ -295,7 +291,7 @@ if __name__ == "__main__":
 
     # 確認
     batch_x, batch_y, mask = make_data(batch_size)
-    carry = model_rtrl.initialize_carry(batch_size, hidden_size)
+    carry = model_rtrl.initialize_carry(batch_size, hidden_size, INPUT_DIM)
     equal_num = 0
     for j in range(SEQ_LEN):
         x_t = batch_x[j]
