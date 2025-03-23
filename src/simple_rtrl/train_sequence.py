@@ -145,6 +145,31 @@ class RtrlCell(nn.Module):
         return (hidden_init, memory_grad_init)
 
 
+class RtrlModel(nn.Module):
+    features_hidden: int
+    features_out: int
+
+    def setup(self):
+        self.dense_hidden = nn.Dense(features=self.features_hidden)
+        self.simple_cell = RtrlCell(hidden_size=self.features_hidden)
+        self.dense_out = nn.Dense(features=self.features_out)
+
+    def __call__(self, carry, x_t):
+        x_t = self.dense_hidden(x_t)
+        carry, y_t = self.simple_cell(carry, x_t)
+        y_t = self.dense_out(y_t)
+        return carry, y_t
+
+    @staticmethod
+    def initialize_carry(batch_size, d_rec):
+        hidden_init = jnp.zeros((batch_size, d_rec))
+        S_R = jnp.zeros((batch_size, d_rec, d_rec, d_rec))
+        S_W = jnp.zeros((batch_size, d_rec, d_rec, d_rec))
+        S_B = jnp.zeros((batch_size, d_rec, d_rec))
+        memory_grad_init = (S_R, S_W, S_B)
+        return (hidden_init, memory_grad_init)
+
+
 def bptt_loss_fn(params, model, batch_carry, batch_x, batch_y, batch_mask):
     # scanでシーケンス全体に対して処理を適用
     step_fn = partial(model, params)
@@ -228,16 +253,16 @@ if __name__ == "__main__":
 
     # モデルの初期化
     model_bptt = SimpleModel(features_hidden=hidden_size, features_out=INPUT_DIM)
-    model_cell_rtrl = RtrlCell(hidden_size=hidden_size)
+    model_rtrl = RtrlModel(features_hidden=hidden_size, features_out=INPUT_DIM)
 
     params_bptt = model_bptt.init(
         init_key,
         model_bptt.initialize_carry(),
         jnp.ones((batch_size, INPUT_DIM)),
     )
-    params_rtrl = model_cell_rtrl.init(
+    params_rtrl = model_rtrl.init(
         init_key,
-        model_cell_rtrl.initialize_carry(batch_size, hidden_size, hidden_size),
+        model_rtrl.initialize_carry(batch_size, hidden_size),
         jnp.ones((batch_size, hidden_size)),
     )
 
@@ -246,7 +271,7 @@ if __name__ == "__main__":
         apply_fn=model_bptt.apply, params=params_bptt, tx=optax.adam(1e-2)
     )
     state_rtrl = train_state.TrainState.create(
-        apply_fn=model_cell_rtrl.apply, params=params_rtrl, tx=optax.adam(1e-3)
+        apply_fn=model_rtrl.apply, params=params_rtrl, tx=optax.adam(1e-3)
     )
 
     # BPTT
