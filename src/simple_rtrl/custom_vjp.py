@@ -1,15 +1,16 @@
+from functools import partial
+
+import flax
 import flax.linen
+import flax.linen as nn
 import jax
 import jax.numpy as jnp
-from flax.training import train_state
-import flax.linen as nn
-import flax
-import optax
 import numpy as np
-from functools import partial
-from flax.linen.linear import Dense, default_kernel_init
-from flax.typing import Dtype, Initializer
+import optax
 from flax.linen import initializers
+from flax.linen.linear import Dense, default_kernel_init
+from flax.training import train_state
+from flax.typing import Dtype, Initializer
 
 # documents for custom_vjp
 # jax) https://docs.jax.dev/en/latest/_autosummary/jax.custom_vjp.html

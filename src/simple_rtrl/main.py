@@ -1,10 +1,11 @@
+from functools import partial
+
+import flax.linen as nn
 import jax
 import jax.numpy as jnp
-import optax
-import flax.linen as nn
-from flax.training import train_state
 import numpy as np
-from functools import partial
+import optax
+from flax.training import train_state
 
 
 class RNNModel(nn.Module):
